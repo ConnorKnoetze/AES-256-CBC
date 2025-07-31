@@ -52,33 +52,59 @@ void AddRoundKey(){
 
 }
 
-void getPadded(char* storePass){
-    const unsigned int bytes[16] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10};
-
-    int pad = strlen(storePass) % 16;
-    if (pad == 0){
+void getPadded(char** storePass) {
+    int pad = strlen(*storePass) % 16;
+    if (pad == 0) {
         pad = 16;
+    } else {
+        pad = 16 - pad;
     }
 
-    unsigned int padding[pad];
-    for (int i = 0; i < pad; i++){
-        padding[i] = bytes[pad-1];
+    char *padding = (char*)malloc(pad + 1);
+    for (int i = 0; i < pad; i++) {
+        padding[i] = (char)(pad + 110);
     }
+    padding[pad] = '\0';
 
-    size_t length = pad;
-    char final_string[length * 2 + 1];
-    for (int y = 0; y < length; y++){
-        sprintf(final_string + (y*2), "%02x", padding[y]);
-    }
+    char *final_string = (char*)realloc(*storePass, strlen(*storePass) + strlen(padding) + 1);
+    strcat(final_string, padding);
 
-    final_string[length * 2] = '\0';
-    strcat(storePass, final_string);
-    printf("%s\n", storePass);
+    free(padding);
+
+    *storePass = final_string;
 }
 
-void encrypt(char* storePass){
+void encrypt(char** storePass) {
+    const int block_size = 16;
+
     getPadded(storePass);
-    printf("%s", storePass);
+
+    int num_blocks = (strlen(*storePass) + block_size - 1) / block_size;
+
+    unsigned int states[num_blocks][4][4];
+
+    int x = 0;
+
+    for (int i = 0; i < num_blocks; i++) {
+        for (int j = 0; j < 4; j++) {
+            for (int y = 0; y < 4; y++) {
+                if (x < strlen(*storePass)) {
+                    states[i][j][y] = (unsigned int)(*storePass)[x];
+                } else {
+                    states[i][j][y] = 0;
+                }
+                x++;
+            }
+        }
+    }
+
+    for (int i = 0; i < num_blocks; i++) {
+        for (int j = 0; j < 4; j++) {
+            for (int y = 0; y < 4; y++) {
+                printf("%c ", states[i][j][y]);
+            }
+        }
+    }
 }
 
 void write_pass(char* struct_user, char* struct_pass){
@@ -89,11 +115,14 @@ void write_pass(char* struct_user, char* struct_pass){
     sizeOfStruct = strlen(struct_user) + strlen(struct_pass);
 
     char *storePass = (char*)malloc(sizeof(char) * sizeOfStruct*2);
-    snprintf(storePass, sizeOfStruct*2, "%s//%s", struct_user, struct_pass);
-    encrypt(storePass);
+    snprintf(storePass, sizeOfStruct*2, "%s:%s:", struct_user, struct_pass);
+
+    encrypt(&storePass);
 
     fwrite(storePass, sizeOfStruct*2, 1, file);
     fclose(file);
+
+    free(storePass);
 }
 
 void read_pass(){
