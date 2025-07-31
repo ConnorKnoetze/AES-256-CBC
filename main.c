@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <openssl/rand.h>
 
 const unsigned char aes_sbox[256] = {
     0x63, 0x7C, 0x77, 0x7B, 0xF2, 0x6B, 0x6F, 0xC5, 0x30, 0x01, 0x67, 0x2B, 0xFE, 0xD7, 0xAB, 0x76,
@@ -28,6 +29,21 @@ struct passwords
     char *password;
 };
 
+void gen_id(char* iv){
+    if (RAND_bytes(iv, sizeof(iv)) != 1) {
+        fprintf(stderr, "Error generating IV\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
+void gen_key(unsigned char* key, int key_size){
+    int key_size_bytes = key_size / 8; // Convert bits to bytes
+    if (RAND_bytes(key, key_size_bytes) != 1){
+        fprintf(stderr, "Error generating random key\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
 void get_inp(char* struct_user, char* struct_pass) {
     printf("Please Enter a Username: \n");
     scanf("%255s", struct_user);
@@ -36,8 +52,18 @@ void get_inp(char* struct_user, char* struct_pass) {
     scanf("%255s", struct_pass);
 }
 
-void SubBytes(){
+void xor_key(){
 
+}
+
+void SubBytes(unsigned int states[][4][4], int blocks){
+    for (int i = 0; i < blocks; i++) {
+        for (int j = 0; j < 4; j++) {
+            for (int y = 0; y < 4; y++) {
+                states[i][j][y] = aes_sbox[states[i][j][y]];
+            }
+        }
+    }
 }
 
 void ShiftRows(){
@@ -75,11 +101,19 @@ void getPadded(char** storePass) {
 }
 
 void encrypt(char** storePass) {
+
+    const int key_size = 256;
     const int block_size = 16;
+
+    unsigned char key[32];
+    unsigned char iv[16];
+
+    gen_key(key, key_size);
+    gen_id(iv);
 
     getPadded(storePass);
 
-    int num_blocks = (strlen(*storePass) + block_size - 1) / block_size;
+    int num_blocks = ((int)strlen(*storePass) + block_size - 1) / block_size;
 
     unsigned int states[num_blocks][4][4];
 
@@ -88,7 +122,7 @@ void encrypt(char** storePass) {
     for (int i = 0; i < num_blocks; i++) {
         for (int j = 0; j < 4; j++) {
             for (int y = 0; y < 4; y++) {
-                if (x < strlen(*storePass)) {
+                if (x < (int)strlen(*storePass)) {
                     states[i][j][y] = (unsigned int)(*storePass)[x];
                 } else {
                     states[i][j][y] = 0;
@@ -98,13 +132,7 @@ void encrypt(char** storePass) {
         }
     }
 
-    for (int i = 0; i < num_blocks; i++) {
-        for (int j = 0; j < 4; j++) {
-            for (int y = 0; y < 4; y++) {
-                printf("%c ", states[i][j][y]);
-            }
-        }
-    }
+    SubBytes(states, num_blocks);
 }
 
 void write_pass(char* struct_user, char* struct_pass){
