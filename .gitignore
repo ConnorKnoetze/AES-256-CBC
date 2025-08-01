@@ -1,3 +1,4 @@
 .vscode/
-.exe
-.py
+*.exe
+terminal.py
+*.txt
