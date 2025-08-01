@@ -67,7 +67,6 @@ void SubBytes(unsigned char (*states)[4][4]){
 void ShiftRows(unsigned char (*state)[4][4]){
     unsigned char temp[4];
 
-    // Row 1: Shift left by 1
     for (int i = 0; i < 4; i++) {
         temp[i] = (*state)[1][(i + 1) % 4];
     }
@@ -75,7 +74,6 @@ void ShiftRows(unsigned char (*state)[4][4]){
         (*state)[1][i] = temp[i];
     }
 
-    // Row 2: Shift left by 2
     for (int i = 0; i < 4; i++) {
         temp[i] = (*state)[2][(i + 2) % 4];
     }
@@ -83,7 +81,6 @@ void ShiftRows(unsigned char (*state)[4][4]){
         (*state)[2][i] = temp[i];
     }
 
-    // Row 3: Shift left by 3
     for (int i = 0; i < 4; i++) {
         temp[i] = (*state)[3][(i + 3) % 4];
     }
@@ -92,21 +89,110 @@ void ShiftRows(unsigned char (*state)[4][4]){
     }
 }
 
-void MixColumns(){
-
+unsigned char gf_mul(unsigned char a, unsigned char b) {
+    unsigned char result = 0;
+    while (b) {
+        if (b & 1) {
+            result ^= a;
+        }
+        unsigned char high_bit_set = a & 0x80;
+        a <<= 1; // Multiply a by x
+        if (high_bit_set) {
+            a ^= 0x1b;
+        }
+        b >>= 1;
+    }
+    return result;
 }
 
-void AddRoundKey(){
+void MixColumns(unsigned char (*state)[4][4]){
+    const unsigned int mix_columns_matrix[4][4] = {
+        {0x02, 0x03, 0x01, 0x01},
+        {0x01, 0x02, 0x03, 0x01},
+        {0x01, 0x01, 0x02, 0x03},
+        {0x03, 0x01, 0x01, 0x02}
+    };
 
+    unsigned int temp[4];
+
+    for (int col = 0; col < 4; col++) { // Process each column
+        for (int row = 0; row < 4; row++) {
+            temp[row] = gf_mul(mix_columns_matrix[row][0], (*state)[0][col]) ^
+                        gf_mul(mix_columns_matrix[row][1], (*state)[1][col]) ^
+                        gf_mul(mix_columns_matrix[row][2], (*state)[2][col]) ^
+                        gf_mul(mix_columns_matrix[row][3], (*state)[3][col]);
+        }
+        for (int row = 0; row < 4; row++) {
+            (*state)[row][col] = temp[row];
+        }
+    }
+}
+
+void KeyExpansion256(unsigned char* key, unsigned char roundKeys[15][4][4]) {
+    const unsigned char Rcon[14] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1B, 0x36, 0x6C, 0xD8, 0xAB, 0x4D};
+
+    for (int i = 0; i < 32; i++) {
+        roundKeys[0][i / 4][i % 4] = key[i];
+    }
+    for (int round = 1; round <= 14; round++) {
+        unsigned char temp[4];
+
+        for (int i = 0; i < 4; i++) {
+            temp[i] = roundKeys[round - 1][i][7];
+        }
+
+        unsigned char t = temp[0];
+        temp[0] = temp[1];
+        temp[1] = temp[2];
+        temp[2] = temp[3];
+        temp[3] = t;
+
+        for (int i = 0; i < 4; i++) {
+            temp[i] = aes_sbox[temp[i]];
+        }
+
+        temp[0] ^= Rcon[round - 1];
+
+        for (int i = 0; i < 4; i++) {
+            roundKeys[round][i][0] = roundKeys[round - 1][i][0] ^ temp[i];
+        }
+
+        for (int col = 1; col < 8; col++) {
+            for (int i = 0; i < 4; i++) {
+                roundKeys[round][i][col] = roundKeys[round - 1][i][col] ^ roundKeys[round][i][col - 1];
+            }
+        }
+    }
+}
+
+void AddRoundKey(unsigned char (*state)[4][4], unsigned char (*roundKey)[4]){
+    for (int i=0; i<4; i++){
+        for (int j=0; j<4; j++){
+            (*state)[i][j] ^= roundKey[i][j];
+        }
+    }
 }
 
 void AES_Encrypt(unsigned char (*state)[4][4], unsigned char *key){
-    for (int i=0; i < 13; i++){
+
+    unsigned char roundKeys[15][4][4];
+    KeyExpansion256(key, roundKeys);
+
+    SubBytes(state);
+    ShiftRows(state);
+    MixColumns(state);
+    AddRoundKey(state, roundKeys[0]);
+
+    for (int i=1; i < 14; i++){
         SubBytes(state);
         ShiftRows(state);
+        MixColumns(state);
+        AddRoundKey(state, roundKeys[i]);
     }
 
-
+    SubBytes(state);
+    ShiftRows(state);
+    AddRoundKey(state, roundKeys[14]);
 }
 
 void getPadded(char** storePass) {
@@ -119,7 +205,7 @@ void getPadded(char** storePass) {
 
     char *padding = (char*)malloc(pad + 1);
     for (int i = 0; i < pad; i++) {
-        padding[i] = (char)(pad + 110);
+        padding[i] = (char)(pad);
     }
     padding[pad] = '\0';
 
@@ -171,13 +257,26 @@ void encrypt(char** storePass) {
 
     for (int i=1; i < num_blocks; i++){
         cbc_main(&states[i], prev);
-        
 
-        
+        AES_Encrypt(&states[i], key);
+
         memcpy(prev, states[i], sizeof(prev));
     }
 
+    unsigned char arr[x];
+    x=0;
+    for (int i = 0; i < num_blocks; i++) {
+        for (int j = 0; j < 4; j++) {
+            for (int y = 0; y < 4; y++) {
+                arr[x] = states[i][j][y];
+                x++;
+            }
+        }
+    }
 
+    for(int i=0; i<x; i++){
+        (*storePass)[i] = arr[i];
+    }
 }
 
 void cbc_main(unsigned char (*plaintext)[4][4], unsigned char prev[4][4]){
