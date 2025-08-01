@@ -4,6 +4,10 @@
 
 #include <openssl/rand.h>
 
+
+void cbc_init(unsigned char (*plaintext)[4][4], unsigned char* iv);
+void cbc_main(unsigned char (*plaintext)[4][4], unsigned char prev[4][4]);
+
 const unsigned char aes_sbox[256] = {
     0x63, 0x7C, 0x77, 0x7B, 0xF2, 0x6B, 0x6F, 0xC5, 0x30, 0x01, 0x67, 0x2B, 0xFE, 0xD7, 0xAB, 0x76,
     0xCA, 0x82, 0xC9, 0x7D, 0xFA, 0x59, 0x47, 0xF0, 0xAD, 0xD4, 0xA2, 0xAF, 0x9C, 0xA4, 0x72, 0xC0,
@@ -29,15 +33,15 @@ struct passwords
     char *password;
 };
 
-void gen_id(char* iv){
-    if (RAND_bytes(iv, sizeof(iv)) != 1) {
+void gen_iv(unsigned char* iv){
+    if (RAND_bytes(iv, 16) != 1) {
         fprintf(stderr, "Error generating IV\n");
         exit(EXIT_FAILURE);
     }
 }
 
 void gen_key(unsigned char* key, int key_size){
-    int key_size_bytes = key_size / 8; // Convert bits to bytes
+    int key_size_bytes = key_size / 8;
     if (RAND_bytes(key, key_size_bytes) != 1){
         fprintf(stderr, "Error generating random key\n");
         exit(EXIT_FAILURE);
@@ -52,22 +56,40 @@ void get_inp(char* struct_user, char* struct_pass) {
     scanf("%255s", struct_pass);
 }
 
-void xor_key(){
-
-}
-
-void SubBytes(unsigned int states[][4][4], int blocks){
-    for (int i = 0; i < blocks; i++) {
-        for (int j = 0; j < 4; j++) {
-            for (int y = 0; y < 4; y++) {
-                states[i][j][y] = aes_sbox[states[i][j][y]];
-            }
+void SubBytes(unsigned char (*states)[4][4]){
+    for (int j = 0; j < 4; j++) {
+        for (int y = 0; y < 4; y++) {
+            (*states)[j][y] = aes_sbox[(*states)[j][y]];
         }
     }
 }
 
-void ShiftRows(){
+void ShiftRows(unsigned char (*state)[4][4]){
+    unsigned char temp[4];
 
+    // Row 1: Shift left by 1
+    for (int i = 0; i < 4; i++) {
+        temp[i] = (*state)[1][(i + 1) % 4];
+    }
+    for (int i = 0; i < 4; i++) {
+        (*state)[1][i] = temp[i];
+    }
+
+    // Row 2: Shift left by 2
+    for (int i = 0; i < 4; i++) {
+        temp[i] = (*state)[2][(i + 2) % 4];
+    }
+    for (int i = 0; i < 4; i++) {
+        (*state)[2][i] = temp[i];
+    }
+
+    // Row 3: Shift left by 3
+    for (int i = 0; i < 4; i++) {
+        temp[i] = (*state)[3][(i + 3) % 4];
+    }
+    for (int i = 0; i < 4; i++) {
+        (*state)[3][i] = temp[i];
+    }
 }
 
 void MixColumns(){
@@ -75,6 +97,15 @@ void MixColumns(){
 }
 
 void AddRoundKey(){
+
+}
+
+void AES_Encrypt(unsigned char (*state)[4][4], unsigned char *key){
+    for (int i=0; i < 13; i++){
+        SubBytes(state);
+        ShiftRows(state);
+    }
+
 
 }
 
@@ -109,13 +140,12 @@ void encrypt(char** storePass) {
     unsigned char iv[16];
 
     gen_key(key, key_size);
-    gen_id(iv);
-
+    gen_iv(iv); // generate initialization vector
     getPadded(storePass);
 
     int num_blocks = ((int)strlen(*storePass) + block_size - 1) / block_size;
 
-    unsigned int states[num_blocks][4][4];
+    unsigned char states[num_blocks][4][4];
 
     int x = 0;
 
@@ -132,7 +162,40 @@ void encrypt(char** storePass) {
         }
     }
 
-    SubBytes(states, num_blocks);
+    cbc_init(&states[0], iv);
+
+    unsigned char prev[4][4];
+    memcpy(prev, states[0], sizeof(prev));
+
+    AES_Encrypt(&states[0], key);
+
+    for (int i=1; i < num_blocks; i++){
+        cbc_main(&states[i], prev);
+        
+
+        
+        memcpy(prev, states[i], sizeof(prev));
+    }
+
+
+}
+
+void cbc_main(unsigned char (*plaintext)[4][4], unsigned char prev[4][4]){
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            (*plaintext)[i][j] ^= prev[i][j];
+        }
+    }
+}
+
+void cbc_init(unsigned char (*plaintext)[4][4], unsigned char* iv) {
+    int x = 0;
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            (*plaintext)[i][j] ^= iv[x];
+            x++;
+        }
+    }
 }
 
 void write_pass(char* struct_user, char* struct_pass){
