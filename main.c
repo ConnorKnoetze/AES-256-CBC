@@ -7,6 +7,7 @@
 
 void cbc_init(unsigned char (*plaintext)[4][4], unsigned char* iv);
 void cbc_main(unsigned char (*plaintext)[4][4], unsigned char prev[4][4]);
+unsigned char gf_mul(unsigned char a, unsigned char b);
 
 const unsigned char aes_sbox[256] = {
     0x63, 0x7C, 0x77, 0x7B, 0xF2, 0x6B, 0x6F, 0xC5, 0x30, 0x01, 0x67, 0x2B, 0xFE, 0xD7, 0xAB, 0x76,
@@ -33,6 +34,8 @@ struct passwords
     char *password;
 };
 
+// Function to generate a random initialization vector (IV) using OpenSSL's RAND_bytes.
+// The IV is critical for ensuring that the same plaintext encrypts to different ciphertexts.
 void gen_iv(unsigned char* iv){
     if (RAND_bytes(iv, 16) != 1) {
         fprintf(stderr, "Error generating IV\n");
@@ -40,14 +43,17 @@ void gen_iv(unsigned char* iv){
     }
 }
 
+// Function to generate a random encryption key of the specified size (in bits).
+// Uses OpenSSL's RAND_bytes to ensure cryptographic randomness.
 void gen_key(unsigned char* key, int key_size){
-    int key_size_bytes = key_size / 8;
+    int key_size_bytes = key_size / 8; // Convert key size from bits to bytes.
     if (RAND_bytes(key, key_size_bytes) != 1){
         fprintf(stderr, "Error generating random key\n");
         exit(EXIT_FAILURE);
     }
 }
 
+// Function to get user input for username and password.
 void get_inp(char* struct_user, char* struct_pass) {
     printf("Please Enter a Username: \n");
     scanf("%255s", struct_user);
@@ -56,6 +62,8 @@ void get_inp(char* struct_user, char* struct_pass) {
     scanf("%255s", struct_pass);
 }
 
+// Function to apply the AES S-box substitution to the state matrix.
+// This is a non-linear transformation that increases security by obscuring relationships between plaintext and ciphertext.
 void SubBytes(unsigned char (*states)[4][4]){
     for (int j = 0; j < 4; j++) {
         for (int y = 0; y < 4; y++) {
@@ -64,9 +72,12 @@ void SubBytes(unsigned char (*states)[4][4]){
     }
 }
 
+// Function to perform the ShiftRows step in AES.
+// This step cyclically shifts rows of the state matrix to the left, introducing diffusion.
 void ShiftRows(unsigned char (*state)[4][4]){
     unsigned char temp[4];
 
+    // Shift the second row by 1 position.
     for (int i = 0; i < 4; i++) {
         temp[i] = (*state)[1][(i + 1) % 4];
     }
@@ -74,6 +85,7 @@ void ShiftRows(unsigned char (*state)[4][4]){
         (*state)[1][i] = temp[i];
     }
 
+    // Shift the third row by 2 positions.
     for (int i = 0; i < 4; i++) {
         temp[i] = (*state)[2][(i + 2) % 4];
     }
@@ -81,6 +93,7 @@ void ShiftRows(unsigned char (*state)[4][4]){
         (*state)[2][i] = temp[i];
     }
 
+    // Shift the fourth row by 3 positions.
     for (int i = 0; i < 4; i++) {
         temp[i] = (*state)[3][(i + 3) % 4];
     }
@@ -89,22 +102,8 @@ void ShiftRows(unsigned char (*state)[4][4]){
     }
 }
 
-unsigned char gf_mul(unsigned char a, unsigned char b) {
-    unsigned char result = 0;
-    while (b) {
-        if (b & 1) {
-            result ^= a;
-        }
-        unsigned char high_bit_set = a & 0x80;
-        a <<= 1; // Multiply a by x
-        if (high_bit_set) {
-            a ^= 0x1b;
-        }
-        b >>= 1;
-    }
-    return result;
-}
-
+// Function to perform the MixColumns step in AES.
+// This step mixes the data within each column of the state matrix using Galois Field arithmetic.
 void MixColumns(unsigned char (*state)[4][4]){
     const unsigned int mix_columns_matrix[4][4] = {
         {0x02, 0x03, 0x01, 0x01},
@@ -128,15 +127,21 @@ void MixColumns(unsigned char (*state)[4][4]){
     }
 }
 
+// Function to expand a 256-bit key into 15 round keys for AES-256.
+// This includes applying the Rcon constant and S-box substitution for key schedule generation.
 void KeyExpansion256(unsigned char* key, unsigned char roundKeys[15][4][4]) {
     const unsigned char Rcon[14] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1B, 0x36, 0x6C, 0xD8, 0xAB, 0x4D};
 
+    // Copy the original key into the first round key.
     for (int i = 0; i < 32; i++) {
         roundKeys[0][i / 4][i % 4] = key[i];
     }
+
+    // Generate subsequent round keys.
     for (int round = 1; round <= 14; round++) {
         unsigned char temp[4];
 
+        // Rotate and substitute the last column of the previous round key.
         for (int i = 0; i < 4; i++) {
             temp[i] = roundKeys[round - 1][i][7];
         }
@@ -153,10 +158,12 @@ void KeyExpansion256(unsigned char* key, unsigned char roundKeys[15][4][4]) {
 
         temp[0] ^= Rcon[round - 1];
 
+        // Generate the first column of the current round key.
         for (int i = 0; i < 4; i++) {
             roundKeys[round][i][0] = roundKeys[round - 1][i][0] ^ temp[i];
         }
 
+        // Generate the remaining columns of the current round key.
         for (int col = 1; col < 8; col++) {
             for (int i = 0; i < 4; i++) {
                 roundKeys[round][i][col] = roundKeys[round - 1][i][col] ^ roundKeys[round][i][col - 1];
@@ -165,6 +172,8 @@ void KeyExpansion256(unsigned char* key, unsigned char roundKeys[15][4][4]) {
     }
 }
 
+// Function to XOR the state matrix with the round key.
+// This is the AddRoundKey step in AES, which combines the key with the state.
 void AddRoundKey(unsigned char (*state)[4][4], unsigned char (*roundKey)[4]){
     for (int i=0; i<4; i++){
         for (int j=0; j<4; j++){
@@ -173,16 +182,17 @@ void AddRoundKey(unsigned char (*state)[4][4], unsigned char (*roundKey)[4]){
     }
 }
 
+// Function to perform AES encryption on a single 16-byte block.
+// This includes all AES rounds and the final AddRoundKey step.
 void AES_Encrypt(unsigned char (*state)[4][4], unsigned char *key){
 
     unsigned char roundKeys[15][4][4];
-    KeyExpansion256(key, roundKeys);
+    KeyExpansion256(key, roundKeys); // Generate round keys.
 
-    SubBytes(state);
-    ShiftRows(state);
-    MixColumns(state);
+    // Initial round: Add the first round key.
     AddRoundKey(state, roundKeys[0]);
 
+    // Main rounds: Apply SubBytes, ShiftRows, MixColumns, and AddRoundKey.
     for (int i=1; i < 14; i++){
         SubBytes(state);
         ShiftRows(state);
@@ -190,11 +200,14 @@ void AES_Encrypt(unsigned char (*state)[4][4], unsigned char *key){
         AddRoundKey(state, roundKeys[i]);
     }
 
+    // Final round: Apply SubBytes, ShiftRows, and AddRoundKey (no MixColumns).
     SubBytes(state);
     ShiftRows(state);
     AddRoundKey(state, roundKeys[14]);
 }
 
+// Function to pad the plaintext to a multiple of 16 bytes.
+// Padding is necessary for AES, which operates on fixed-size blocks.
 void getPadded(char** storePass) {
     int pad = strlen(*storePass) % 16;
     if (pad == 0) {
@@ -203,9 +216,10 @@ void getPadded(char** storePass) {
         pad = 16 - pad;
     }
 
+    // Allocate memory for the padding and append it to the plaintext.
     char *padding = (char*)malloc(pad + 1);
     for (int i = 0; i < pad; i++) {
-        padding[i] = (char)(pad);
+        padding[i] = (char)(pad); // Use PKCS#7 padding scheme.
     }
     padding[pad] = '\0';
 
@@ -217,52 +231,55 @@ void getPadded(char** storePass) {
     *storePass = final_string;
 }
 
+// Function to encrypt a plaintext string using AES in CBC mode.
+// This includes padding, block-wise encryption, and chaining with the IV.
 void encrypt(char** storePass) {
 
-    const int key_size = 256;
-    const int block_size = 16;
+    const int key_size = 256; // AES-256 key size.
+    const int block_size = 16; // AES block size.
 
     unsigned char key[32];
     unsigned char iv[16];
 
-    gen_key(key, key_size);
-    gen_iv(iv); // generate initialization vector
-    getPadded(storePass);
+    gen_key(key, key_size); // Generate a random encryption key.
+    gen_iv(iv); // Generate a random initialization vector.
+    getPadded(storePass); // Pad the plaintext.
 
-    int num_blocks = ((int)strlen(*storePass) + block_size - 1) / block_size;
+    int num_blocks = ((int)strlen(*storePass) + block_size - 1) / block_size; // Calculate the number of blocks.
 
-    unsigned char states[num_blocks][4][4];
+    unsigned char states[num_blocks][4][4]; // Array to hold the state matrices for each block.
 
     int x = 0;
 
+    // Convert the plaintext into state matrices.
     for (int i = 0; i < num_blocks; i++) {
         for (int j = 0; j < 4; j++) {
             for (int y = 0; y < 4; y++) {
                 if (x < (int)strlen(*storePass)) {
                     states[i][j][y] = (unsigned int)(*storePass)[x];
                 } else {
-                    states[i][j][y] = 0;
+                    states[i][j][y] = 0; // Pad with zeros if necessary.
                 }
                 x++;
             }
         }
     }
 
-    cbc_init(&states[0], iv);
+    cbc_init(&states[0], iv); // XOR the first block with the IV.
 
     unsigned char prev[4][4];
-    memcpy(prev, states[0], sizeof(prev));
+    memcpy(prev, states[0], sizeof(prev)); // Store the first block for chaining.
 
-    AES_Encrypt(&states[0], key);
+    AES_Encrypt(&states[0], key); // Encrypt the first block.
 
+    // Encrypt the remaining blocks using CBC mode.
     for (int i=1; i < num_blocks; i++){
-        cbc_main(&states[i], prev);
-
-        AES_Encrypt(&states[i], key);
-
-        memcpy(prev, states[i], sizeof(prev));
+        cbc_main(&states[i], prev); // XOR the current block with the previous ciphertext block.
+        AES_Encrypt(&states[i], key); // Encrypt the current block.
+        memcpy(prev, states[i], sizeof(prev)); // Update the previous block.
     }
 
+    // Flatten the state matrices back into a single array.
     unsigned char arr[x];
     x=0;
     for (int i = 0; i < num_blocks; i++) {
@@ -274,6 +291,7 @@ void encrypt(char** storePass) {
         }
     }
 
+    // Copy the encrypted data back into the original string.
     for(int i=0; i<x; i++){
         (*storePass)[i] = arr[i];
     }
@@ -328,6 +346,24 @@ void read_pass(){
         printf("%s", readBuffer);
     }
     fclose(file);
+}
+
+// Function to perform Galois Field multiplication of two bytes.
+// This is used in the MixColumns step of AES to mix data within columns.
+unsigned char gf_mul(unsigned char a, unsigned char b) {
+    unsigned char result = 0;
+    while (b) {
+        if (b & 1) {
+            result ^= a; // Add a to the result if the lowest bit of b is set.
+        }
+        unsigned char high_bit_set = a & 0x80; // Check if the highest bit of a is set.
+        a <<= 1; // Multiply a by x (shift left).
+        if (high_bit_set) {
+            a ^= 0x1b; // Perform modulo reduction with the AES irreducible polynomial.
+        }
+        b >>= 1; // Divide b by x (shift right).
+    }
+    return result;
 }
 
 int main() {
