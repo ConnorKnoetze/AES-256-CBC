@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include <openssl/rand.h>
+#include <openssl/evp.h>
 
 
 void cbc_init(unsigned char (*plaintext)[4][4], unsigned char* iv);
@@ -34,9 +35,39 @@ struct passwords
     char *password;
 };
 
+// Define this macro to enable seeded random values for testing purposes comment out to return to random.
+#define USE_SEEDED_RANDOM
+
+#ifdef USE_SEEDED_RANDOM
+// Function to seed the OpenSSL random number generator for testing purposes.
+void seed_random() {
+    const unsigned char seed[16] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10}; // Constant seed for reproducibility.
+    RAND_seed(seed, sizeof(seed));
+}
+
+// Function to generate a fixed initialization vector (IV) for testing purposes.
+void gen_iv(unsigned char* iv){
+    const unsigned char fixed_iv[16] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00};
+    memcpy(iv, fixed_iv, 16);
+}
+
+// Function to generate a fixed encryption key for testing purposes.
+void gen_key(unsigned char* key, int key_size){
+    const unsigned char fixed_key[32] = {
+        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+        0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10,
+        0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+        0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20
+    };
+    memcpy(key, fixed_key, key_size / 8);
+}
+#else
 // Function to generate a random initialization vector (IV) using OpenSSL's RAND_bytes.
 // The IV is critical for ensuring that the same plaintext encrypts to different ciphertexts.
 void gen_iv(unsigned char* iv){
+#ifdef USE_SEEDED_RANDOM
+    seed_random();
+#endif
     if (RAND_bytes(iv, 16) != 1) {
         fprintf(stderr, "Error generating IV\n");
         exit(EXIT_FAILURE);
@@ -46,12 +77,16 @@ void gen_iv(unsigned char* iv){
 // Function to generate a random encryption key of the specified size (in bits).
 // Uses OpenSSL's RAND_bytes to ensure cryptographic randomness.
 void gen_key(unsigned char* key, int key_size){
+#ifdef USE_SEEDED_RANDOM
+    seed_random();
+#endif
     int key_size_bytes = key_size / 8; // Convert key size from bits to bytes.
     if (RAND_bytes(key, key_size_bytes) != 1){
         fprintf(stderr, "Error generating random key\n");
         exit(EXIT_FAILURE);
     }
 }
+#endif
 
 // Function to get user input for username and password.
 void get_inp(char* struct_user, char* struct_pass) {
@@ -256,9 +291,9 @@ void encrypt(char** storePass) {
         for (int j = 0; j < 4; j++) {
             for (int y = 0; y < 4; y++) {
                 if (x < (int)strlen(*storePass)) {
-                    states[i][j][y] = (unsigned int)(*storePass)[x];
+                    states[i][y][j] = (unsigned int)(*storePass)[x];
                 } else {
-                    states[i][j][y] = 0; // Pad with zeros if necessary.
+                    states[i][y][j] = 0; // Pad with zeros if necessary.
                 }
                 x++;
             }
@@ -285,7 +320,7 @@ void encrypt(char** storePass) {
     for (int i = 0; i < num_blocks; i++) {
         for (int j = 0; j < 4; j++) {
             for (int y = 0; y < 4; y++) {
-                arr[x] = states[i][j][y];
+                arr[x] = states[i][y][j];
                 x++;
             }
         }
@@ -295,6 +330,46 @@ void encrypt(char** storePass) {
     for(int i=0; i<x; i++){
         (*storePass)[i] = arr[i];
     }
+}
+
+int encode64(char** storePass){
+    const char base64_alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    int size = (int)strlen(*storePass);
+    int pad = size % 3;
+    int output_size = ((size + 2) / 3) * 4;
+
+    char temp[output_size];
+
+    int index = 0;
+    for (int i = 0; i < size; i += 3) {
+        unsigned int b1 = (unsigned char)(*storePass)[i];
+        unsigned int b2 = (i + 1 < size) ? (unsigned char)(*storePass)[i + 1] : 0;
+        unsigned int b3 = (i + 2 < size) ? (unsigned char)(*storePass)[i + 2] : 0;
+
+        unsigned int bitBuffer = (b1 << 16) | (b2 << 8) | b3;
+
+        temp[index++] = base64_alphabet[(bitBuffer >> 18) & 0x3F];
+        temp[index++] = base64_alphabet[(bitBuffer >> 12) & 0x3F];
+        temp[index++] = (i + 1 < size) ? base64_alphabet[(bitBuffer >> 6) & 0x3F] : '=';
+        temp[index++] = (i + 2 < size) ? base64_alphabet[bitBuffer & 0x3F] : '=';
+    }
+    
+    for(int y=0; y < index; y++){
+                printf("%c", temp[y]);
+            }
+            printf("\n");
+    *storePass = (char*)realloc(*storePass, sizeof(temp));
+    if (*storePass == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        exit(EXIT_FAILURE);
+    }
+    memcpy(*storePass, temp, sizeof(temp));
+    return index;
+}
+
+void decrypt(){
+
 }
 
 void cbc_main(unsigned char (*plaintext)[4][4], unsigned char prev[4][4]){
@@ -327,7 +402,9 @@ void write_pass(char* struct_user, char* struct_pass){
 
     encrypt(&storePass);
 
-    fwrite(storePass, sizeOfStruct*2, 1, file);
+    int new_size = encode64(&storePass);
+
+    fwrite(storePass, new_size, 1, file);
     fclose(file);
 
     free(storePass);
@@ -366,19 +443,17 @@ unsigned char gf_mul(unsigned char a, unsigned char b) {
     return result;
 }
 
-int main() {
-    struct passwords pass;
-    pass.password = (char*)malloc(256 * sizeof(char));
-    pass.username = (char*)malloc(256 * sizeof(char));
+int main(int argc, char* argv[]) {
+    if (argc != 3) {
+        fprintf(stderr, "Usage: %s <username> <password>\n", argv[0]);
+        return EXIT_FAILURE;
+    }
 
-    get_inp(pass.username, pass.password);
+    struct passwords pass;
+    pass.username = argv[1];
+    pass.password = argv[2];
 
     write_pass(pass.username, pass.password);
 
-    // read_pass();
-
-    free(pass.password);
-    free(pass.username);
-    
     return 0;
 }
