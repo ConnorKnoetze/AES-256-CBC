@@ -10,10 +10,13 @@ OPENSSL_INCLUDE = /ucrt64/include
 TARGET = main.exe
 
 # Source files
-SRCS = main.c
+SRCS = main.c encrypt.c
 
 main: main.c
 	$(CC) $(CFLAGS) -I$(OPENSSL_INCLUDE) -L$(OPENSSL_LIB) -o main main.c -lcrypto -lssl
+
+encrypt: encrypt.c
+	$(CC) $(CFLAGS) -I$(OPENSSL_INCLUDE) -L$(OPENSSL_LIB) -o encrypt encrypt.c -lcrypto -lssl
 
 # Build target
 all: $(TARGET)
