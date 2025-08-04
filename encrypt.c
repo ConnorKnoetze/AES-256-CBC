@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "decode64.h"
 
 #include <openssl/rand.h>
 #include <openssl/evp.h>
@@ -9,6 +10,8 @@
 void cbc_init(unsigned char (*plaintext)[4][4], unsigned char* iv);
 void cbc_main(unsigned char (*plaintext)[4][4], unsigned char prev[4][4]);
 unsigned char gf_mul(unsigned char a, unsigned char b);
+int encode64(char** buffer, int size);
+int encrypt(char** storePass, unsigned char* key, unsigned char* iv);
 
 const unsigned char aes_sbox[256] = {
     0x63, 0x7C, 0x77, 0x7B, 0xF2, 0x6B, 0x6F, 0xC5, 0x30, 0x01, 0x67, 0x2B, 0xFE, 0xD7, 0xAB, 0x76,
@@ -258,21 +261,68 @@ void getPadded(char** storePass) {
     *storePass = final_string;
 }
 
+// Function to store key used in instance to encrypt password.
+// Using a Master key
+void StoreKey(unsigned char* key) {
+    char* key_array = (char*)malloc(45);
+
+    char *stored_key = (char *)malloc(33); // Allocate memory for the key (32 bytes + null terminator).
+    if (stored_key == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        return;
+    }
+    memcpy(stored_key, key, 32);
+    stored_key[32] = '\0'; // Null-terminate the string.
+
+    FILE *file = fopen("./masterkey.txt", "r");
+    if (file == NULL) {
+        perror("Error opening file");
+        return;
+    }
+
+    while (fgets(key_array, 45, file) != NULL) {}
+    fclose(file);
+
+    size_t size = (3 * 45) / 4 - 2; // Size of decoded master key
+
+    unsigned char *decoded_key_array = (unsigned char *)malloc(size);
+    if (decoded_key_array == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        free(key_array);
+        return;
+    }
+
+    unsigned char iv[16];
+    gen_iv(iv);
+    encrypt(&stored_key, decoded_key_array, iv); 
+
+    int new_size = encode64(&stored_key, 32);
+
+    FILE *file1 = fopen("./keys.txt", "w");
+    if (file1 == NULL) {
+        perror("Error opening file");
+        free(key_array);
+        free(decoded_key_array);
+        return;
+    }
+
+    size_t written = fwrite(stored_key, 1, new_size, file1);
+    if (written != new_size) {
+        perror("Error writing to file");
+    }
+    fclose(file1);
+
+    free(key_array);
+    free(decoded_key_array);
+    free(stored_key); // Free the allocated memory after use.
+}
+
 // Function to encrypt a plaintext string using AES in CBC mode.
 // This includes padding, block-wise encryption, and chaining with the IV.
-void encrypt(char** storePass) {
-
-    const int key_size = 256; // AES-256 key size.
+int encrypt(char** buffer, unsigned char* key, unsigned char* iv) {
     const int block_size = 16; // AES block size.
 
-    unsigned char key[32];
-    unsigned char iv[16];
-
-    gen_key(key, key_size); // Generate a random encryption key.
-    gen_iv(iv); // Generate a random initialization vector.
-    getPadded(storePass); // Pad the plaintext.
-
-    int num_blocks = ((int)strlen(*storePass) + block_size - 1) / block_size; // Calculate the number of blocks.
+    int num_blocks = ((int)strlen(*buffer) + block_size - 1) / block_size; // Calculate the number of blocks.
 
     unsigned char states[num_blocks][4][4]; // Array to hold the state matrices for each block.
 
@@ -282,8 +332,8 @@ void encrypt(char** storePass) {
     for (int i = 0; i < num_blocks; i++) {
         for (int j = 0; j < 4; j++) {
             for (int y = 0; y < 4; y++) {
-                if (x < (int)strlen(*storePass)) {
-                    states[i][y][j] = (unsigned int)(*storePass)[x];
+                if (x < (int)strlen(*buffer)) {
+                    states[i][y][j] = (unsigned int)(*buffer)[x];
                 } else {
                     states[i][y][j] = 0; // Pad with zeros if necessary.
                 }
@@ -320,29 +370,28 @@ void encrypt(char** storePass) {
 
     // Copy the encrypted data back into the original string.
     for(int i=0; i<x; i++){
-        (*storePass)[i] = arr[i];
+        (*buffer)[i] = arr[i];
     }
+    (*buffer)[x] = '\0'; // Null-terminate the buffer.
+
+    return x;
 }
 
 
 // Function to perform Base64 encoding
-int encode64(char** storePass){
+int encode64(char** buffer, int size){
     const char base64_alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-    int size = (int)strlen(*storePass);
     int output_size = ((size + 2) / 3) * 4; // The size of the new output array
 
     char temp[output_size]; // Temporary array to store string while building
 
     int index = 0;
-
     // Increment over string 3 characters at a time
     for (int i = 0; i < size; i += 3) {
-
         // Isolate the three characters bitwise
-        unsigned int b1 = (unsigned char)(*storePass)[i];
-        unsigned int b2 = (i + 1 < size) ? (unsigned char)(*storePass)[i + 1] : 0;
-        unsigned int b3 = (i + 2 < size) ? (unsigned char)(*storePass)[i + 2] : 0;
+        unsigned int b1 = (i < size) ? (unsigned char)(*buffer)[i] : 0;
+        unsigned int b2 = (i + 1 < size) ? (unsigned char)(*buffer)[i + 1] : 0;
+        unsigned int b3 = (i + 2 < size) ? (unsigned char)(*buffer)[i + 2] : 0;
 
         // Merge the characters in one buffer
         unsigned int bitBuffer = (b1 << 16) | (b2 << 8) | b3;
@@ -354,16 +403,17 @@ int encode64(char** storePass){
         temp[index++] = base64_alphabet[(bitBuffer >> 12) & 0x3F];
         temp[index++] = (i + 1 < size) ? base64_alphabet[(bitBuffer >> 6) & 0x3F] : '=';
         temp[index++] = (i + 2 < size) ? base64_alphabet[bitBuffer & 0x3F] : '=';
-    }
-    
-    *storePass = (char*)realloc(*storePass, sizeof(temp));
-    if (*storePass == NULL) {
+    } 
+    *buffer = (char*)realloc(*buffer, output_size + 1); // Allocate space for null terminator.
+    if (*buffer == NULL) {
         fprintf(stderr, "Memory allocation failed\n");
         exit(EXIT_FAILURE);
     }
-    memcpy(*storePass, temp, sizeof(temp));
-    return index; // Return the size of the new string.
+    memcpy(*buffer, temp, output_size);
+    (*buffer)[output_size] = '\0'; // Null-terminate the string.
+    return output_size; // Return the size of the new string.
 }
+
 
 void cbc_main(unsigned char (*plaintext)[4][4], unsigned char prev[4][4]){
     for (int i = 0; i < 4; i++) {
@@ -393,9 +443,19 @@ void write_pass(char* struct_user, char* struct_pass){
     char *storePass = (char*)malloc(sizeof(char) * sizeOfStruct*2);
     snprintf(storePass, sizeOfStruct*2, "%s:%s:", struct_user, struct_pass);
 
-    encrypt(&storePass);
+    const int key_size = 256; // AES-256 key size.
+    unsigned char key[32];
+    unsigned char iv[16];
 
-    int new_size = encode64(&storePass);
+    gen_key(key, key_size); // Generate a random encryption key.
+    gen_iv(iv); // Generate a random initialization vector.
+    getPadded(&storePass); // Pad the plaintext.
+
+    int size = encrypt(&storePass, key, iv);
+
+    StoreKey(key);
+
+    size_t new_size = encode64(&storePass, size);
 
     fwrite(storePass, new_size, 1, file);
     fclose(file);
