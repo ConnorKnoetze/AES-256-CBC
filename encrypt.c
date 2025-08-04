@@ -6,7 +6,7 @@
 #include <openssl/rand.h>
 #include <openssl/evp.h>
 
-
+// Declare functions out of scope of their callers
 void cbc_init(unsigned char (*plaintext)[4][4], unsigned char* iv);
 void cbc_main(unsigned char (*plaintext)[4][4], unsigned char prev[4][4]);
 unsigned char gf_mul(unsigned char a, unsigned char b);
