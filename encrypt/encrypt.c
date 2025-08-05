@@ -14,7 +14,6 @@ void cbc_main(unsigned char (*plaintext)[4][4], unsigned char prev[4][4]);
 int encode64(char** buffer, int size);
 int encrypt(char** storePass, unsigned char* key, unsigned char* iv);
 
-
 struct passwords 
 {
     char *username;
@@ -22,9 +21,9 @@ struct passwords
 };
 
 // Define this macro to enable seeded random values for testing purposes comment out to return to random.
-// #define USE_SEEDED_RANDOM
-
+#define USE_SEEDED_RANDOM
 #ifdef USE_SEEDED_RANDOM
+
 // Function to seed the OpenSSL random number generator for testing purposes.
 void seed_random() {
     const unsigned char seed[16] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10}; // Constant seed for reproducibility.
