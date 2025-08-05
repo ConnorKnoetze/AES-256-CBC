@@ -3,6 +3,8 @@
 #include <string.h>
 #include "decode64.h"
 
+#include "AES_Encrypt.h";
+
 #include <openssl/rand.h>
 #include <openssl/evp.h>
 
@@ -274,7 +276,7 @@ void StoreKey(unsigned char* key) {
     memcpy(stored_key, key, 32);
     stored_key[32] = '\0'; // Null-terminate the string.
 
-    FILE *file = fopen("./masterkey.txt", "r");
+    FILE *file = fopen("./textfiles/masterkey.txt", "r");
     if (file == NULL) {
         perror("Error opening file");
         return;
@@ -298,22 +300,40 @@ void StoreKey(unsigned char* key) {
 
     int new_size = encode64(&stored_key, 32);
 
-    FILE *file1 = fopen("./keys.txt", "w");
+    FILE *file1 = fopen("./textfiles/key.txt", "w");
     if (file1 == NULL) {
-        perror("Error opening file");
         free(key_array);
         free(decoded_key_array);
+        free(stored_key); // Free the allocated memory after use.
         return;
     }
 
-    size_t written = fwrite(stored_key, 1, new_size, file1);
-    if (written != new_size) {
-        perror("Error writing to file");
-    }
+    fwrite(stored_key, 1, new_size, file1);
     fclose(file1);
+
+    char *stored_iv = (char*)malloc(16);
+    if (stored_iv == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        return;
+    }
+    memcpy(stored_iv, iv, 16);
+    size_t new_iv_size = encode64(&stored_iv, 16); // Encode the stored key in Base64 format.
+
+    FILE *file2 = fopen("./textfiles/iv.txt", "w");
+    if (file2 == NULL){
+        free(key_array);
+        free(decoded_key_array);
+        free(stored_iv);
+        free(stored_key); // Free the allocated memory after use.
+        return;
+    }
+
+    fwrite(stored_iv, 1, new_iv_size, file2);
+    fclose(file2);
 
     free(key_array);
     free(decoded_key_array);
+    free(stored_iv);
     free(stored_key); // Free the allocated memory after use.
 }
 
@@ -434,7 +454,7 @@ void cbc_init(unsigned char (*plaintext)[4][4], unsigned char* iv) {
 }
 
 void write_pass(char* struct_user, char* struct_pass){
-    FILE *file = fopen("./password.txt", "w");
+    FILE *file = fopen("./textfiles/password.txt", "w");
 
     int sizeOfStruct = 0;
 
