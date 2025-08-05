@@ -256,8 +256,6 @@ void cbc_init(unsigned char (*plaintext)[4][4], unsigned char* iv) {
 }
 
 void write_pass(char* struct_user, char* struct_pass){
-    FILE *file = fopen("./textfiles/password.txt", "w");
-
     int sizeOfStruct = 0;
 
     sizeOfStruct = strlen(struct_user) + strlen(struct_pass);
@@ -273,12 +271,17 @@ void write_pass(char* struct_user, char* struct_pass){
     gen_iv(iv); // Generate a random initialization vector.
     getPadded(&storePass); // Pad the plaintext.
 
-    int size = encrypt(&storePass, key, iv);
+    int size = encrypt(&storePass, key, iv); // Encrypt Username and Password
 
-    StoreKey(key);
+    StoreKey(key); // Encrypt and store key used to encrypt Username and Password
 
-    size_t new_size = encode64(&storePass, size);
+    size_t new_size = encode64(&storePass, size); // Base64 encode encrypted Username and Password for storage
 
+    FILE *file = fopen("./textfiles/password.txt", "w");
+    if (file == NULL){
+        free(storePass);
+        return;
+    }
     fwrite(storePass, new_size, 1, file);
     fclose(file);
 
