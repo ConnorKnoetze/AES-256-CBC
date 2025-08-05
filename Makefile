@@ -24,6 +24,11 @@ $(TARGET): $(SRCS)
 test: test.c
 	$(CC) $(CFLAGS) -I$(OPENSSL_INCLUDE) -L$(OPENSSL_LIB) -o test.exe test.c -lcrypto -lssl
 
+# Add a target for tester.c
+tester: ./decrypt/tester.c
+	$(CC) $(CFLAGS) -I$(OPENSSL_INCLUDE) -L$(OPENSSL_LIB) -o ./decrypt/tester.exe ./decrypt/tester.c -lcrypto -lssl
+
 # Clean up
 clean:
-	rm -f $(TARGET) test.exe
+	rm -f $(TARGET) ./decrypt/tester.exe
+	rm -f $(TARGET) ./encrypt/encrypt.exe

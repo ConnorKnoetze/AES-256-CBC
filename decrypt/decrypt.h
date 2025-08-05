@@ -19,7 +19,7 @@ void read_pass(char *input){
     fclose(file);
 }
 
-int decrypt(char *masterkey, char *key, char *iv, char *ciphertext, size_t masterkey_size, size_t key_size, size_t iv_size, size_t ciphertext_size) {
+void decrypt(char *masterkey, char *key, char *iv, char *ciphertext, size_t masterkey_size, size_t key_size, size_t iv_size, size_t ciphertext_size) {
     printf("%s, %s, %s, %s\n", masterkey, key, iv, ciphertext);
 }
 
