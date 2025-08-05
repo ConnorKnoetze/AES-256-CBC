@@ -21,7 +21,7 @@ struct passwords
 };
 
 // Define this macro to enable seeded random values for testing purposes comment out to return to random.
-#define USE_SEEDED_RANDOM
+// #define USE_SEEDED_RANDOM
 
 #ifdef USE_SEEDED_RANDOM
 
@@ -33,8 +33,8 @@ void seed_random() {
 
 // Function to generate a fixed initialization vector (IV) for testing purposes.
 void gen_iv(unsigned char* iv){
-    const unsigned char fixed_iv[16] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00};
-    memcpy(iv, fixed_iv, 16);
+    const unsigned char fixed_iv[17] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11, '\0'};
+    memcpy(iv, fixed_iv, 17);
 }
 
 // Function to generate a fixed encryption key for testing purposes.
@@ -110,7 +110,7 @@ void StoreKey(unsigned char* key) {
         fprintf(stderr, "Memory allocation failed\n");
         return;
     }
-    memcpy(stored_key, key, 32);
+    memcpy(stored_key, key, 33);
     stored_key[32] = '\0'; // Null-terminate the string.
 
     FILE *file = fopen("./textfiles/masterkey.txt", "r");
@@ -131,7 +131,7 @@ void StoreKey(unsigned char* key) {
         return;
     }
 
-    unsigned char iv[16];
+    unsigned char iv[17];
     gen_iv(iv);
     encrypt(&stored_key, decoded_key_array, iv); 
 

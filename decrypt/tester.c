@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "decrypt.h"
+#include "decrypt.c"
 
 
 int main(){
@@ -45,19 +45,22 @@ int main(){
     long ciphertext_size = ftell(file3)+ 1;
     rewind(file3);
 
-    char masterkey[masterkey_size], key[key_size], iv[iv_size], ciphertext[ciphertext_size];
+    char *masterkey = (char *)malloc(masterkey_size);
+    char *key = (char *)malloc(key_size);
+    char *iv = (char *)malloc(iv_size);
+    char *ciphertext = (char *)malloc(ciphertext_size);
 
     while(fgets(masterkey, masterkey_size, file0)){};
     while(fgets(key, key_size, file1)){};
     while(fgets(iv, iv_size, file2)){};
     while(fgets(ciphertext, ciphertext_size, file3)){};
 
-    masterkey[masterkey_size] = '\0',
-    key[key_size] = '\0',
-    iv[iv_size] = '\0',
-    ciphertext[ciphertext_size] = '\0';
-
     decrypt(masterkey, key, iv, ciphertext, masterkey_size, key_size, iv_size, ciphertext_size);
+
+    free(masterkey);
+    free(key);  
+    free(iv);
+    free(ciphertext);
 
     return 1;
 }
