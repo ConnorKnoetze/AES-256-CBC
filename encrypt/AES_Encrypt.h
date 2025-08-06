@@ -26,10 +26,10 @@ const unsigned char aes_sbox[256] = {
 
 // Function to apply the AES S-box substitution to the state matrix.
 // This is a non-linear transformation that increases security by obscuring relationships between plaintext and ciphertext.
-void SubBytes(unsigned char (*states)[4][4]){
-    for (int j = 0; j < 4; j++) {
-        for (int y = 0; y < 4; y++) {
-            (*states)[j][y] = aes_sbox[(*states)[j][y]];
+void SubBytes(unsigned char (*state)[4][4]){
+    for (int row = 0; row < 4; row++) {
+        for (int col = 0; col < 4; col++) {
+            (*state)[row][col] = aes_sbox[(*state)[row][col]];
         }
     }
 }
@@ -40,99 +40,92 @@ void SubBytes(unsigned char (*states)[4][4]){
 void ShiftRows(unsigned char (*state)[4][4]){
     unsigned char temp[4];
 
-    // Shift the second row by 1 position.
-    for (int i = 0; i < 4; i++) {
-        temp[i] = (*state)[1][(i + 1) % 4];
+    // Row 1: shift left by 1
+    for (int col = 0; col < 4; col++) {
+        temp[col] = (*state)[1][(col + 1) % 4];
     }
-    for (int i = 0; i < 4; i++) {
-        (*state)[1][i] = temp[i];
-    }
-
-    // Shift the third row by 2 positions.
-    for (int i = 0; i < 4; i++) {
-        temp[i] = (*state)[2][(i + 2) % 4];
-    }
-    for (int i = 0; i < 4; i++) {
-        (*state)[2][i] = temp[i];
+    for (int col = 0; col < 4; col++) {
+        (*state)[1][col] = temp[col];
     }
 
-    // Shift the fourth row by 3 positions.
-    for (int i = 0; i < 4; i++) {
-        temp[i] = (*state)[3][(i + 3) % 4];
+    // Row 2: shift left by 2
+    for (int col = 0; col < 4; col++) {
+        temp[col] = (*state)[2][(col + 2) % 4];
     }
-    for (int i = 0; i < 4; i++) {
-        (*state)[3][i] = temp[i];
+    for (int col = 0; col < 4; col++) {
+        (*state)[2][col] = temp[col];
+    }
+
+    // Row 3: shift left by 3
+    for (int col = 0; col < 4; col++) {
+        temp[col] = (*state)[3][(col + 3) % 4];
+    }
+    for (int col = 0; col < 4; col++) {
+        (*state)[3][col] = temp[col];
     }
 }
 
 
 // Function to perform the MixColumns step in AES.
-// This step mixes the data within each column of the state matrix using Galois Field arithmetic.
-void MixColumns(unsigned char (*state)[4][4]){
-    const unsigned int mix_columns_matrix[4][4] = {
-        {0x02, 0x03, 0x01, 0x01},
-        {0x01, 0x02, 0x03, 0x01},
-        {0x01, 0x01, 0x02, 0x03},
-        {0x03, 0x01, 0x01, 0x02}
-    };
-
-    unsigned int temp[4];
-
-    for (int col = 0; col < 4; col++) { // Process each column
-        for (int row = 0; row < 4; row++) {
-            temp[row] = gf_mul(mix_columns_matrix[row][0], (*state)[0][col]) ^
-                        gf_mul(mix_columns_matrix[row][1], (*state)[1][col]) ^
-                        gf_mul(mix_columns_matrix[row][2], (*state)[2][col]) ^
-                        gf_mul(mix_columns_matrix[row][3], (*state)[3][col]);
-        }
-        for (int row = 0; row < 4; row++) {
-            (*state)[row][col] = temp[row];
-        }
+void MixColumns(unsigned char (*state)[4][4]) {
+    for (int c = 0; c < 4; c++) {
+        unsigned char a0 = (*state)[0][c];
+        unsigned char a1 = (*state)[1][c];
+        unsigned char a2 = (*state)[2][c];
+        unsigned char a3 = (*state)[3][c];
+        (*state)[0][c] = gf_mul(0x02, a0) ^ gf_mul(0x03, a1) ^ a2 ^ a3;
+        (*state)[1][c] = a0 ^ gf_mul(0x02, a1) ^ gf_mul(0x03, a2) ^ a3;
+        (*state)[2][c] = a0 ^ a1 ^ gf_mul(0x02, a2) ^ gf_mul(0x03, a3);
+        (*state)[3][c] = gf_mul(0x03, a0) ^ a1 ^ a2 ^ gf_mul(0x02, a3);
     }
 }
 
 
 // Function to expand a 256-bit key into 15 round keys for AES-256.
-// This includes applying the Rcon constant and S-box substitution for key schedule generation.
-void KeyExpansion256(unsigned char* key, unsigned char roundKeys[15][4][4]) {
-    const unsigned char Rcon[14] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1B, 0x36, 0x6C, 0xD8, 0xAB, 0x4D};
-
-    // Copy the original key into the first round key.
-    for (int i = 0; i < 32; i++) {
-        roundKeys[0][i / 4][i % 4] = key[i];
+void KeyExpansion256(const unsigned char* key, unsigned char roundKeys[15][4][4]) {
+    unsigned char expandedKey[240]; // 60 words * 4 bytes
+    const unsigned char Rcon[15] = {0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80,0x1B,0x36,0x6C,0xD8,0xAB,0x4D,0x9A};
+    int i, j;
+    // Copy the original key (32 bytes)
+    for (i = 0; i < 32; i++) {
+        expandedKey[i] = key[i];
     }
-
-    // Generate subsequent round keys.
-    for (int round = 1; round <= 14; round++) {
-        unsigned char temp[4];
-
-        // Rotate and substitute the last column of the previous round key.
-        for (int i = 0; i < 4; i++) {
-            temp[i] = roundKeys[round - 1][i][7];
+    int bytesGenerated = 32;
+    int rconIter = 0;
+    unsigned char temp[4];
+    while (bytesGenerated < 240) {
+        for (j = 0; j < 4; j++) {
+            temp[j] = expandedKey[bytesGenerated - 4 + j];
         }
-
-        unsigned char t = temp[0];
-        temp[0] = temp[1];
-        temp[1] = temp[2];
-        temp[2] = temp[3];
-        temp[3] = t;
-
-        for (int i = 0; i < 4; i++) {
-            temp[i] = aes_sbox[temp[i]];
-        }
-
-        temp[0] ^= Rcon[round - 1];
-
-        // Generate the first column of the current round key.
-        for (int i = 0; i < 4; i++) {
-            roundKeys[round][i][0] = roundKeys[round - 1][i][0] ^ temp[i];
-        }
-
-        // Generate the remaining columns of the current round key.
-        for (int col = 1; col < 8; col++) {
-            for (int i = 0; i < 4; i++) {
-                roundKeys[round][i][col] = roundKeys[round - 1][i][col] ^ roundKeys[round][i][col - 1];
+        if (bytesGenerated % 32 == 0) {
+            // Rotate
+            unsigned char t = temp[0];
+            temp[0] = temp[1];
+            temp[1] = temp[2];
+            temp[2] = temp[3];
+            temp[3] = t;
+            // S-box
+            for (j = 0; j < 4; j++) {
+                temp[j] = aes_sbox[temp[j]];
             }
+            // Rcon
+            temp[0] ^= Rcon[rconIter++];
+        } else if (bytesGenerated % 32 == 16) {
+            // S-box only
+            for (j = 0; j < 4; j++) {
+                temp[j] = aes_sbox[temp[j]];
+            }
+        }
+        for (j = 0; j < 4; j++) {
+            expandedKey[bytesGenerated] = expandedKey[bytesGenerated - 32] ^ temp[j];
+            bytesGenerated++;
+        }
+    }
+    // Copy expandedKey into roundKeys (15 round keys, each 16 bytes)
+    // User's original style, but with the bug fix: column-major order
+    for (i = 0; i < 15; i++) {
+        for (j = 0; j < 16; j++) {
+            roundKeys[i][j % 4][j / 4] = expandedKey[i * 16 + j];
         }
     }
 }

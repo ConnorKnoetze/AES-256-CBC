@@ -22,10 +22,11 @@ const unsigned char inv_sbox[256] = {
 };
 
 // Declare InvAES functions
-void InvShiftRows();
-void InvSubBytes();
-void InvMixColumns();
-void AddRoundKey();
+void InvShiftRows(unsigned char (*state)[4][4]);
+void InvSubBytes(unsigned char (*state)[4][4]);
+void InvMixColumns(unsigned char (*state)[4][4]);
+void AddRoundKey(unsigned char(*state)[4][4], unsigned char (*roundkey)[4]);
+unsigned char gf_mul(unsigned char a, unsigned char b);
 
 // Delcare Main AES Decryption functions
 void KeyExpansion256(unsigned char* key, unsigned char roundKeys[15][4][4]);
@@ -48,19 +49,22 @@ void KeyExpansion256(unsigned char* key, unsigned char roundKeys[15][4][4]) {
 
         // Rotate and substitute the last column of the previous round key.
         for (int i = 0; i < 4; i++) {
-            temp[i] = roundKeys[round - 1][i][7];
+            temp[i] = roundKeys[round - 1][i][3]; // Corrected to use the last column.
         }
 
+        // Rotate the word.
         unsigned char t = temp[0];
         temp[0] = temp[1];
         temp[1] = temp[2];
         temp[2] = temp[3];
         temp[3] = t;
 
+        // Apply S-box substitution.
         for (int i = 0; i < 4; i++) {
             temp[i] = inv_sbox[temp[i]];
         }
 
+        // XOR with Rcon.
         temp[0] ^= Rcon[round - 1];
 
         // Generate the first column of the current round key.
@@ -69,7 +73,7 @@ void KeyExpansion256(unsigned char* key, unsigned char roundKeys[15][4][4]) {
         }
 
         // Generate the remaining columns of the current round key.
-        for (int col = 1; col < 8; col++) {
+        for (int col = 1; col < 4; col++) {
             for (int i = 0; i < 4; i++) {
                 roundKeys[round][i][col] = roundKeys[round - 1][i][col] ^ roundKeys[round][i][col - 1];
             }
@@ -77,9 +81,110 @@ void KeyExpansion256(unsigned char* key, unsigned char roundKeys[15][4][4]) {
     }
 }
 
+
+// Function to perform Galois Field multiplication of two bytes.
+// This is used in the MixColumns step of AES to mix data within columns.
+unsigned char gf_mul(unsigned char a, unsigned char b) {
+    unsigned char result = 0;
+    while (b) {
+        if (b & 1) {
+            result ^= a; // Add a to the result if the lowest bit of b is set.
+        }
+        unsigned char high_bit_set = a & 0x80; // Check if the highest bit of a is set.
+        a <<= 1; // Multiply a by x (shift left).
+        if (high_bit_set) {
+            a ^= 0x1b; // Perform modulo reduction with the AES irreducible polynomial.
+        }
+        b >>= 1; // Divide b by x (shift right).
+    }
+    return result;
+}
+
+// Function to perform the InvMixColumns step in AES decryption.
+// This mixes the columns of the state matrix using Galois Field multiplication.
+void InvMixColumns(unsigned char (*state)[4][4]){
+    unsigned char temp[4];
+
+    for (int col = 0; col < 4; col++) {
+        temp[0] = gf_mul(0x0E, (*state)[0][col]) ^ gf_mul(0x0B, (*state)[1][col]) ^
+                  gf_mul(0x0D, (*state)[2][col]) ^ gf_mul(0x09, (*state)[3][col]);
+        temp[1] = gf_mul(0x09, (*state)[0][col]) ^ gf_mul(0x0E, (*state)[1][col]) ^
+                  gf_mul(0x0B, (*state)[2][col]) ^ gf_mul(0x0D, (*state)[3][col]);
+        temp[2] = gf_mul(0x0D, (*state)[0][col]) ^ gf_mul(0x09, (*state)[1][col]) ^
+                  gf_mul(0x0E, (*state)[2][col]) ^ gf_mul(0x0B, (*state)[3][col]);
+        temp[3] = gf_mul(0x0B, (*state)[0][col]) ^ gf_mul(0x0D, (*state)[1][col]) ^
+                  gf_mul(0x09, (*state)[2][col]) ^ gf_mul(0x0E, (*state)[3][col]);
+
+        for (int row = 0; row < 4; row++) {
+            (*state)[row][col] = temp[row];
+        }
+    }
+}
+
+// Function to perform the InvSubBytes step in AES decryption.
+// This substitutes each byte in the state matrix with its corresponding value from the inverse S-box.
+void InvSubBytes(unsigned char (*state)[4][4]){
+    for (int i=0 ; i < 4; i++){
+        for (int j=0 ; j < 4; j++){
+            (*state)[i][j] = inv_sbox[(*state)[i][j]]; // Substitute each byte in the state with its inverse S-box value.
+        }
+    }
+}
+
+// Function to perform the InvShiftRows step in AES decryption.
+// This shifts the rows of the state matrix to the right, reversing the ShiftRows step in
+void InvShiftRows(unsigned char (*state)[4][4]) {
+    unsigned char temp;
+
+    // Row 1: Shift right by 1
+    temp = (*state)[1][3];
+    (*state)[1][3] = (*state)[1][2];
+    (*state)[1][2] = (*state)[1][1];
+    (*state)[1][1] = (*state)[1][0];
+    (*state)[1][0] = temp;
+
+    // Row 2: Shift right by 2
+    temp = (*state)[2][0];
+    (*state)[2][0] = (*state)[2][2];
+    (*state)[2][2] = temp;
+    temp = (*state)[2][1];
+    (*state)[2][1] = (*state)[2][3];
+    (*state)[2][3] = temp;
+
+    // Row 3: Shift right by 3
+    temp = (*state)[3][0];
+    (*state)[3][0] = (*state)[3][1];
+    (*state)[3][1] = (*state)[3][2];
+    (*state)[3][2] = (*state)[3][3];
+    (*state)[3][3] = temp;
+}
+
+// Function to perform the AddRoundKey step in AES decryption.
+// This combines the state matrix with the round key using XOR operation.
+void AddRoundKey(unsigned char(*state)[4][4], unsigned char (*roundkey)[4]){
+    for (int i=0 ; i < 4; i++){
+        for (int j=0 ; j < 4; j++){
+            (*state)[i][j] ^= roundkey[i][j];
+        }
+    }
+}
+
+// Function to perform AES decryption on a 4x4 state matrix using a 256-bit key.
+// This function applies the inverse AES transformations in reverse order.
 void AES_Decrypt(unsigned char (*state)[4][4], unsigned char *key){
     unsigned char roundKeys[15][4][4];
     KeyExpansion256(key, roundKeys); // Generate round keys.
 
-    
+    // Initial AddRoundKey step.
+    AddRoundKey(state, roundKeys[15]);
+
+    // Perform the inverse rounds.
+    for (int round = 13; round >= 0; round--) {
+        InvShiftRows(state);
+        InvSubBytes(state);
+        AddRoundKey(state, roundKeys[round]);
+        if (round != 0){ // Skip InvMixColumns for the last round.
+            InvMixColumns(state);
+        }
+    }
 }

@@ -1,29 +1,26 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 #include "decrypt.c"
 
 
 int main(){
-    FILE *file0, *file1, *file2, *file3;
-
-    file0 = fopen("./textfiles/masterkey.txt", "r");
+    FILE *file0 = fopen("./textfiles/masterkey.txt", "r");
     if (file0 == NULL) {
         perror("Error opening file");
         return -1;
     }
-    file1 = fopen("./textfiles/key.txt", "r");
+    FILE *file1 = fopen("./textfiles/key.txt", "r");
     if (file1 == NULL) {
         perror("Error opening file");
         return -1;
     }
-    file2 = fopen("./textfiles/iv.txt", "r");
+    FILE *file2 = fopen("./textfiles/iv.txt", "r");
     if (file2 == NULL) {
         perror("Error opening file");
         return -1;
     }
-    file3 = fopen("./textfiles/password.txt", "r");
+    FILE *file3 = fopen("./textfiles/password.txt", "r");
     if (file3 == NULL) {
         perror("Error opening file");
         return -1;
