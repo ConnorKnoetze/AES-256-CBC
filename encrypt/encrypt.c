@@ -108,46 +108,27 @@ void getPadded(char** buffer) {
 // Function to store key used in instance to encrypt password.
 // Using a Master key
 void StoreKey(unsigned char* key, unsigned char* iv) {
-    // char* key_array = (char*)malloc(45);
+    char* masterkey_array = (char*)malloc(45);
 
-    // char *stored_key = (char *)malloc(33); // Allocate memory for the key (32 bytes + null terminator).
-    // if (stored_key == NULL) {
-    //     fprintf(stderr, "Memory allocation failed\n");
-    //     return;
-    // }
-    // memcpy(stored_key, key, 33);
-    // stored_key[32] = '\0'; // Null-terminate the string.
+    FILE *file = fopen("./textfiles/masterkey.txt", "r");
+    if (file == NULL) {
+        perror("Error opening file");
+        return;
+    }
 
-    // FILE *file = fopen("./textfiles/masterkey.txt", "r");
-    // if (file == NULL) {
-    //     perror("Error opening file");
-    //     return;
-    // }
+    while (fgets(masterkey_array, 45, file) != NULL) {}
+    fclose(file);
 
-    // while (fgets(key_array, 45, file) != NULL) {}
-    // fclose(file);
+    size_t size = (3 * 45) / 4 - 2; // Size of decoded master key
 
-    // size_t size = (3 * 45) / 4 - 2; // Size of decoded master key
+    unsigned char *decoded_masterkey_array = (unsigned char *)malloc(size);
+    if (decoded_masterkey_array == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        free(masterkey_array);
+        return;
+    }
 
-    // unsigned char *decoded_key_array = (unsigned char *)malloc(size);
-    // if (decoded_key_array == NULL) {
-    //     fprintf(stderr, "Memory allocation failed\n");
-    //     free(key_array);
-    //     return;
-    // }
-
-    // char storedkeyhex[65];
-    // for (int i = 0; i < 32; i++) {
-    //     sprintf(&storedkeyhex[i * 2], "%02x", (unsigned char)stored_key[i]);
-    // }
-    // storedkeyhex[64] = '\0';
-
-    // FILE *file3 = fopen("./textfiles/unencrypted_key.txt", "w");
-    // if (file3 == NULL) {
-    //     perror("Error opening file");
-    //     return;
-    // }
-    // fwrite(storedkeyhex, 1, 64, file3);
+    decode_base64(masterkey_array, &decoded_masterkey_array, &size);
 
     char* key_chars = (char*)malloc(33);
     if (key_chars == NULL) {
@@ -159,9 +140,6 @@ void StoreKey(unsigned char* key, unsigned char* iv) {
     }
     key_chars[32] = '\0';
 
-    unsigned char masterkey[33];
-    gen_masterkey(masterkey);
-
     getPadded(&key_chars);
     size_t padded_len = strlen(key_chars); 
 
@@ -170,7 +148,7 @@ void StoreKey(unsigned char* key, unsigned char* iv) {
     }
     printf("\n");
 
-    encrypt(&key_chars, masterkey, iv); 
+    encrypt(&key_chars, decoded_masterkey_array, iv); 
 
     printf("Stored Key (Hex): ");
     for (size_t i = 0; i < padded_len; i++) {
@@ -183,9 +161,8 @@ void StoreKey(unsigned char* key, unsigned char* iv) {
 
     FILE *file1 = fopen("./textfiles/key.txt", "w");
     if (file1 == NULL) {
-        // free(key_array);
-        // free(decoded_key_array);
-        // free(stored_key); // Free the allocated memory after use.
+        free(masterkey_array);
+        free(decoded_masterkey_array);
         free(key_chars);
         return;
     }
@@ -205,10 +182,10 @@ void StoreKey(unsigned char* key, unsigned char* iv) {
 
     FILE *file2 = fopen("./textfiles/iv.txt", "w");
     if (file2 == NULL){
-        // free(key_array);
-        // free(decoded_key_array);
+        free(masterkey_array);
+        free(decoded_masterkey_array);
         free(stored_iv);
-        // free(stored_key); // Free the allocated memory after use.
+        free(key_chars); // Free the allocated memory after use.
         return;
     }
     
@@ -216,10 +193,10 @@ void StoreKey(unsigned char* key, unsigned char* iv) {
     fwrite(stored_iv, 1, new_iv_size, file2);
     fclose(file2);
 
-    // free(key_array);
-    // free(decoded_key_array);
+    free(masterkey_array);
+    free(decoded_masterkey_array);
     free(stored_iv);
-    // free(stored_key); // Free the allocated memory after use.
+    free(key_chars); // Free the allocated memory after use.
 }
 
 // Function to encrypt a plaintext string using AES in CBC mode.
