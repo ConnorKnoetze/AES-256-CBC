@@ -1,29 +1,26 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
-#include "decrypt.h"
+#include "decrypt.c"
 
 
 int main(){
-    FILE *file0, *file1, *file2, *file3;
-
-    file0 = fopen("./textfiles/masterkey.txt", "r");
+    FILE *file0 = fopen("./textfiles/masterkey.txt", "r");
     if (file0 == NULL) {
         perror("Error opening file");
         return -1;
     }
-    file1 = fopen("./textfiles/key.txt", "r");
+    FILE *file1 = fopen("./textfiles/key.txt", "r");
     if (file1 == NULL) {
         perror("Error opening file");
         return -1;
     }
-    file2 = fopen("./textfiles/iv.txt", "r");
+    FILE *file2 = fopen("./textfiles/iv.txt", "r");
     if (file2 == NULL) {
         perror("Error opening file");
         return -1;
     }
-    file3 = fopen("./textfiles/password.txt", "r");
+    FILE *file3 = fopen("./textfiles/password.txt", "r");
     if (file3 == NULL) {
         perror("Error opening file");
         return -1;
@@ -45,19 +42,22 @@ int main(){
     long ciphertext_size = ftell(file3)+ 1;
     rewind(file3);
 
-    char masterkey[masterkey_size], key[key_size], iv[iv_size], ciphertext[ciphertext_size];
+    char *masterkey = (char *)malloc(masterkey_size);
+    char *key = (char *)malloc(key_size);
+    char *iv = (char *)malloc(iv_size);
+    char *ciphertext = (char *)malloc(ciphertext_size);
 
     while(fgets(masterkey, masterkey_size, file0)){};
     while(fgets(key, key_size, file1)){};
     while(fgets(iv, iv_size, file2)){};
     while(fgets(ciphertext, ciphertext_size, file3)){};
 
-    masterkey[masterkey_size] = '\0',
-    key[key_size] = '\0',
-    iv[iv_size] = '\0',
-    ciphertext[ciphertext_size] = '\0';
-
     decrypt(masterkey, key, iv, ciphertext, masterkey_size, key_size, iv_size, ciphertext_size);
+
+    free(masterkey);
+    free(key);  
+    free(iv);
+    free(ciphertext);
 
     return 1;
 }

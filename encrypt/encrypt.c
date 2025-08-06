@@ -32,21 +32,26 @@ void seed_random() {
 }
 
 // Function to generate a fixed initialization vector (IV) for testing purposes.
-void gen_iv(unsigned char* iv){
-    const unsigned char fixed_iv[16] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00};
-    memcpy(iv, fixed_iv, 16);
+void gen_printable_iv(unsigned char* iv) {
+    // 16 printable ASCII characters (example: digits and uppercase)
+    const char printable_iv[17] = "1234ABCDEFGH5678";
+    memcpy(iv, printable_iv, 16);
 }
 
 // Function to generate a fixed encryption key for testing purposes.
 void gen_key(unsigned char* key, int key_size){
-    const unsigned char fixed_key[32] = {
-        0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-        0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10,
-        0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
-        0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20
-    };
-    memcpy(key, fixed_key, key_size / 8);
+    // 32 printable ASCII characters (example: all uppercase letters and digits)
+    const char printable_key[33] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456";
+    memcpy(key, printable_key, 32);
 }
+
+// Function to generate a fixed printable master key for testing purposes.
+void gen_masterkey(unsigned char* masterkey) {
+    // 32 printable ASCII characters (example: uppercase letters and lowercase letters)
+    const char printable_masterkey[33] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef";
+    memcpy(masterkey, printable_masterkey, 32);
+}
+
 #else
 // Function to generate a random initialization vector (IV) using OpenSSL's RAND_bytes.
 // The IV is critical for ensuring that the same plaintext encrypts to different ciphertexts.
@@ -77,41 +82,33 @@ void gen_key(unsigned char* key, int key_size){
 
 // Function to pad the plaintext to a multiple of 16 bytes.
 // Padding is necessary for AES, which operates on fixed-size blocks.
-void getPadded(char** storePass) {
-    int pad = strlen(*storePass) % 16;
+void getPadded(char** buffer) {
+    size_t orig_len = strlen(*buffer);
+    int pad = orig_len % 16;
     if (pad == 0) {
         pad = 16;
     } else {
         pad = 16 - pad;
     }
 
-    // Allocate memory for the padding and append it to the plaintext.
-    char *padding = (char*)malloc(pad + 1);
-    for (int i = 0; i < pad; i++) {
-        padding[i] = (char)(pad); // Use PKCS#7 padding scheme.
+    char *final_string = (char*)realloc(*buffer, orig_len + pad + 1);
+    if (final_string == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        return;
     }
-    padding[pad] = '\0';
 
-    char *final_string = (char*)realloc(*storePass, strlen(*storePass) + strlen(padding) + 1);
-    strcat(final_string, padding);
+    for (int i = 0; i < pad; i++) {
+        final_string[orig_len + i] = (char)pad;
+    }
+    final_string[orig_len + pad] = '\0';
 
-    free(padding);
-
-    *storePass = final_string;
+    *buffer = final_string;
 }
 
 // Function to store key used in instance to encrypt password.
 // Using a Master key
-void StoreKey(unsigned char* key) {
-    char* key_array = (char*)malloc(45);
-
-    char *stored_key = (char *)malloc(33); // Allocate memory for the key (32 bytes + null terminator).
-    if (stored_key == NULL) {
-        fprintf(stderr, "Memory allocation failed\n");
-        return;
-    }
-    memcpy(stored_key, key, 32);
-    stored_key[32] = '\0'; // Null-terminate the string.
+void StoreKey(unsigned char* key, unsigned char* iv) {
+    char* masterkey_array = (char*)malloc(45);
 
     FILE *file = fopen("./textfiles/masterkey.txt", "r");
     if (file == NULL) {
@@ -119,33 +116,59 @@ void StoreKey(unsigned char* key) {
         return;
     }
 
-    while (fgets(key_array, 45, file) != NULL) {}
+    while (fgets(masterkey_array, 45, file) != NULL) {}
     fclose(file);
 
     size_t size = (3 * 45) / 4 - 2; // Size of decoded master key
 
-    unsigned char *decoded_key_array = (unsigned char *)malloc(size);
-    if (decoded_key_array == NULL) {
+    unsigned char *decoded_masterkey_array = (unsigned char *)malloc(size);
+    if (decoded_masterkey_array == NULL) {
         fprintf(stderr, "Memory allocation failed\n");
-        free(key_array);
+        free(masterkey_array);
         return;
     }
 
-    unsigned char iv[16];
-    gen_iv(iv);
-    encrypt(&stored_key, decoded_key_array, iv); 
+    decode_base64(masterkey_array, &decoded_masterkey_array, &size);
 
-    int new_size = encode64(&stored_key, 32);
+    char* key_chars = (char*)malloc(33);
+    if (key_chars == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        return;
+    }
+    for (int i = 0; i < 32; i++) {
+        key_chars[i] = (char)key[i];
+    }
+    key_chars[32] = '\0';
+
+    getPadded(&key_chars);
+    size_t padded_len = strlen(key_chars); 
+
+    for (size_t i = 0; i < padded_len; i++) {
+        printf("%02x", (unsigned char)key_chars[i]);
+    }
+    printf("\n");
+
+    encrypt(&key_chars, decoded_masterkey_array, iv); 
+
+    printf("Stored Key (Hex): ");
+    for (size_t i = 0; i < padded_len; i++) {
+        printf("%02x", (unsigned char)key_chars[i]);
+    }
+    printf("\n");
+
+
+    int new_size = encode64(&key_chars, 48);
 
     FILE *file1 = fopen("./textfiles/key.txt", "w");
     if (file1 == NULL) {
-        free(key_array);
-        free(decoded_key_array);
-        free(stored_key); // Free the allocated memory after use.
+        free(masterkey_array);
+        free(decoded_masterkey_array);
+        free(key_chars);
         return;
     }
 
-    fwrite(stored_key, 1, new_size, file1);
+    fwrite(key_chars, 1, new_size, file1);
+    free(key_chars);
     fclose(file1);
 
     char *stored_iv = (char*)malloc(16);
@@ -154,14 +177,15 @@ void StoreKey(unsigned char* key) {
         return;
     }
     memcpy(stored_iv, iv, 16);
+
     size_t new_iv_size = encode64(&stored_iv, 16); // Encode the stored key in Base64 format.
 
     FILE *file2 = fopen("./textfiles/iv.txt", "w");
     if (file2 == NULL){
-        free(key_array);
-        free(decoded_key_array);
+        free(masterkey_array);
+        free(decoded_masterkey_array);
         free(stored_iv);
-        free(stored_key); // Free the allocated memory after use.
+        free(key_chars); // Free the allocated memory after use.
         return;
     }
     
@@ -169,10 +193,10 @@ void StoreKey(unsigned char* key) {
     fwrite(stored_iv, 1, new_iv_size, file2);
     fclose(file2);
 
-    free(key_array);
-    free(decoded_key_array);
+    free(masterkey_array);
+    free(decoded_masterkey_array);
     free(stored_iv);
-    free(stored_key); // Free the allocated memory after use.
+    free(key_chars); // Free the allocated memory after use.
 }
 
 // Function to encrypt a plaintext string using AES in CBC mode.
@@ -191,7 +215,7 @@ int encrypt(char** buffer, unsigned char* key, unsigned char* iv) {
         for (int j = 0; j < 4; j++) {
             for (int y = 0; y < 4; y++) {
                 if (x < (int)strlen(*buffer)) {
-                    states[i][y][j] = (unsigned int)(*buffer)[x];
+                    states[i][y][j] = (unsigned char)(*buffer)[x];
                 } else {
                     states[i][y][j] = 0; // Pad with zeros if necessary.
                 }
@@ -201,36 +225,50 @@ int encrypt(char** buffer, unsigned char* key, unsigned char* iv) {
     }
 
     cbc_init(&states[0], iv); // XOR the first block with the IV.
-
-    unsigned char prev[4][4];
-    memcpy(prev, states[0], sizeof(prev)); // Store the first block for chaining.
-
     AES_Encrypt(&states[0], key); // Encrypt the first block.
 
+    unsigned char prev[4][4];
+    memcpy(prev, states[0], sizeof(prev)); // Store the ciphertext of the first block for chaining.
+
     // Encrypt the remaining blocks using CBC mode.
-    for (int i=1; i < num_blocks; i++){
+    for (int i = 1; i < num_blocks; i++) {
         cbc_main(&states[i], prev); // XOR the current block with the previous ciphertext block.
         AES_Encrypt(&states[i], key); // Encrypt the current block.
         memcpy(prev, states[i], sizeof(prev)); // Update the previous block.
     }
 
+    // for (int i = 0; i < num_blocks; i++) {
+    //     AES_Encrypt(&states[i], key);
+    // }
+
+
     // Flatten the state matrices back into a single array.
-    unsigned char arr[x];
-    x=0;
+    unsigned char* arr = (unsigned char*)malloc(num_blocks * block_size);
+    if (arr == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        return -1;
+    }
+
+    x = 0;
     for (int i = 0; i < num_blocks; i++) {
-        for (int j = 0; j < 4; j++) {
-            for (int y = 0; y < 4; y++) {
-                arr[x] = states[i][y][j];
+        for (int y = 0; y < 4; y++) {
+            for (int j = 0; j < 4; j++) {
+                arr[x] = states[i][j][y];
                 x++;
             }
         }
     }
 
-    // Copy the encrypted data back into the original string.
-    for(int i=0; i<x; i++){
-        (*buffer)[i] = arr[i];
+    *buffer = (char*)realloc(*buffer, x + 1);
+    if (*buffer == NULL) {
+        fprintf(stderr, "Memory reallocation failed\n");
+        free(arr);
+        return -1;
     }
+    memcpy(*buffer, arr, x);
     (*buffer)[x] = '\0'; // Null-terminate the buffer.
+
+    free(arr);
 
     return x;
 }
@@ -238,18 +276,18 @@ int encrypt(char** buffer, unsigned char* key, unsigned char* iv) {
 
 
 void cbc_main(unsigned char (*plaintext)[4][4], unsigned char prev[4][4]){
-    for (int i = 0; i < 4; i++) {
+    for (int y = 0; y < 4; y++) {
         for (int j = 0; j < 4; j++) {
-            (*plaintext)[i][j] ^= prev[i][j];
+            (*plaintext)[j][y] ^= prev[j][y];
         }
     }
 }
 
 void cbc_init(unsigned char (*plaintext)[4][4], unsigned char* iv) {
     int x = 0;
-    for (int i = 0; i < 4; i++) {
+    for (int y = 0; y < 4; y++) {
         for (int j = 0; j < 4; j++) {
-            (*plaintext)[i][j] ^= iv[x];
+            (*plaintext)[j][y] ^= iv[x];
             x++;
         }
     }
@@ -268,14 +306,15 @@ void write_pass(char* struct_user, char* struct_pass){
     unsigned char iv[16];
 
     gen_key(key, key_size); // Generate a random encryption key.
-    gen_iv(iv); // Generate a random initialization vector.
+    gen_printable_iv(iv); // Generate a random initialization vector.
     getPadded(&storePass); // Pad the plaintext.
 
     int size = encrypt(&storePass, key, iv); // Encrypt Username and Password
 
-    StoreKey(key); // Encrypt and store key used to encrypt Username and Password
+    StoreKey(key, iv); // Encrypt and store key used to encrypt Username and Password
 
     size_t new_size = encode64(&storePass, size); // Base64 encode encrypted Username and Password for storage
+
 
     FILE *file = fopen("./textfiles/password.txt", "w");
     if (file == NULL){
@@ -288,17 +327,15 @@ void write_pass(char* struct_user, char* struct_pass){
     free(storePass);
 }
 
+
 int main(int argc, char* argv[]) {
     if (argc != 3) {
         fprintf(stderr, "Usage: %s <username> <password>\n", argv[0]);
         return EXIT_FAILURE;
     }
-
     struct passwords pass;
     pass.username = argv[1];
     pass.password = argv[2];
-
     write_pass(pass.username, pass.password);
-
     return 0;
 }
