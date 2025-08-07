@@ -8,14 +8,14 @@
 #include <openssl/rand.h>
 #include <openssl/evp.h>
 
-void decrypt(char *masterkey, char *key, char *iv, char *ciphertext, size_t masterkey_size, size_t key_size, size_t iv_size, size_t ciphertext_size);
+unsigned char* decrypt(char *masterkey, char *key, char *iv, char *ciphertext, size_t masterkey_size, size_t key_size, size_t iv_size, size_t ciphertext_size);
 void cbc_init(unsigned char (*state)[4][4], unsigned char *key);
 void cbc_init(unsigned char (*plaintext)[4][4], unsigned char* iv);
 void cbc_main(unsigned char (*plaintext)[4][4], unsigned char prev[4][4]);
 
 void perform_AES(unsigned char** ciphertext, size_t ciphertext_size, unsigned char* key, unsigned char *iv);
 
-#define MAINACTIVE;
+// #define MAINACTIVE;
 // #define MAIN2ACTIVE;
 #ifdef MAINACTIVE
 void test_perform_AES() {
@@ -59,6 +59,21 @@ void test_perform_AES() {
             printf(".");
     }
     printf("\n");
+
+    unsigned char pad = ciphertext_ptr[ciphertext_size - 1];
+    
+    int remove_pad = 0;
+    for (int i = ciphertext_size - 1; i >= 0; i--){
+        if(ciphertext_ptr[i] == pad){
+            remove_pad++;
+        }
+    }
+
+    ciphertext_size -= remove_pad;
+    ciphertext_ptr = (unsigned char*)realloc(ciphertext_ptr, ciphertext_size + 1);
+    ciphertext_ptr[ciphertext_size] = '\0';
+
+    printf("%s", ciphertext_ptr);
 
     free(ciphertext_ptr);
 }
@@ -127,7 +142,7 @@ void perform_AES(unsigned char** ciphertext, size_t ciphertext_size, unsigned ch
 
 // Function to decrypt the password using the master key, key, IV, and ciphertext
 // This function decodes the Base64 encoded strings, decrypts the ciphertext.
-void decrypt(char *masterkey, char *key, char *iv, char *ciphertext,
+unsigned char* decrypt(char *masterkey, char *key, char *iv, char *ciphertext,
              size_t masterkey_size, size_t key_size, size_t iv_size, size_t ciphertext_size) {
     // Only declare pointers, let decode_base64 allocate memory
     unsigned char *decoded_masterkey = NULL;
@@ -145,33 +160,47 @@ void decrypt(char *masterkey, char *key, char *iv, char *ciphertext,
     // If not, skip this step and use decoded_key directly
     perform_AES(&decoded_key, decoded_key_size, decoded_masterkey, decoded_iv);
 
-    // Print as string (if text) or as hex
-    printf("Decrypted: \n");
-    for (size_t i = 0; i < decoded_key_size; i++) {
-        printf("%d\n", i);
+    unsigned char pad = decoded_key[ciphertext_size - 1];
+    
+    int remove_pad = 0;
+    for (int i = decoded_key_size - 1; i >= 0; i--){
+        if(decoded_key[i] == pad){
+            remove_pad++;
+        }
     }
-    printf("\n");
-    printf("Decrypted (hex): ");
-    for (size_t i = 0; i < decoded_key_size; i++) {
-        printf("%02x ", decoded_key[i]);
-    }
-    printf("\n");
 
+    decoded_key_size -= remove_pad;
+    decoded_key = (unsigned char*)realloc(decoded_key, decoded_key_size + 1);
+    decoded_key[decoded_key_size] = '\0';
 
     // Decrypt the ciphertext using the key and IV
     perform_AES(&decoded_ciphertext, decoded_ciphertext_size, decoded_key, decoded_iv);
 
+    pad = decoded_ciphertext[decoded_ciphertext_size - 1];
+    
+    remove_pad = 0;
+    for (int i = decoded_ciphertext_size - 1; i >= 0; i--){
+        if(decoded_ciphertext[i] == pad){
+            remove_pad++;
+        }
+    }
+
+    decoded_ciphertext_size -= remove_pad;
+    decoded_ciphertext = (unsigned char*)realloc(decoded_ciphertext, decoded_ciphertext_size + 1);
+    decoded_ciphertext[decoded_ciphertext_size] = '\0';
 
     free(decoded_masterkey);
     free(decoded_key);
     free(decoded_iv);
     free(decoded_ciphertext);
+
+    return decoded_ciphertext;
 }
 
 void cbc_init(unsigned char (*plaintext)[4][4], unsigned char* iv) {
     int x = 0;
-    for (int y = 0; y < 4; y++) {         // row
-        for (int j = 0; j < 4; j++) {     // column
+    for (int y = 0; y < 4; y++) {
+        for (int j = 0; j < 4; j++) {
             (*plaintext)[j][y] ^= iv[x];
             x++;
         }
@@ -179,8 +208,8 @@ void cbc_init(unsigned char (*plaintext)[4][4], unsigned char* iv) {
 }
 
 void cbc_main(unsigned char (*plaintext)[4][4], unsigned char prev[4][4]){
-    for (int y = 0; y < 4; y++) {         // row
-        for (int j = 0; j < 4; j++) {     // column
+    for (int y = 0; y < 4; y++) {
+        for (int j = 0; j < 4; j++) {
             (*plaintext)[j][y] ^= prev[j][y];
         }
     }

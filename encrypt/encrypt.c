@@ -156,8 +156,10 @@ void StoreKey(unsigned char* key, unsigned char* iv) {
     }
     printf("\n");
 
-
     int new_size = encode64(&key_chars, 48);
+
+    printf("encrypted key (base64): ");
+    printf("%s\n", key_chars);
 
     FILE *file1 = fopen("./textfiles/key.txt", "w");
     if (file1 == NULL) {
@@ -179,6 +181,8 @@ void StoreKey(unsigned char* key, unsigned char* iv) {
     memcpy(stored_iv, iv, 16);
 
     size_t new_iv_size = encode64(&stored_iv, 16); // Encode the stored key in Base64 format.
+    printf("iv (base64): ");
+    printf("%s\n", stored_iv);
 
     FILE *file2 = fopen("./textfiles/iv.txt", "w");
     if (file2 == NULL){
@@ -194,9 +198,7 @@ void StoreKey(unsigned char* key, unsigned char* iv) {
     fclose(file2);
 
     free(masterkey_array);
-    free(decoded_masterkey_array);
     free(stored_iv);
-    free(key_chars); // Free the allocated memory after use.
 }
 
 // Function to encrypt a plaintext string using AES in CBC mode.
@@ -236,11 +238,6 @@ int encrypt(char** buffer, unsigned char* key, unsigned char* iv) {
         AES_Encrypt(&states[i], key); // Encrypt the current block.
         memcpy(prev, states[i], sizeof(prev)); // Update the previous block.
     }
-
-    // for (int i = 0; i < num_blocks; i++) {
-    //     AES_Encrypt(&states[i], key);
-    // }
-
 
     // Flatten the state matrices back into a single array.
     unsigned char* arr = (unsigned char*)malloc(num_blocks * block_size);
@@ -298,29 +295,38 @@ void write_pass(char* struct_user, char* struct_pass){
 
     sizeOfStruct = strlen(struct_user) + strlen(struct_pass);
 
+    printf("%d\n",sizeOfStruct);
+
     char *storePass = (char*)malloc(sizeof(char) * sizeOfStruct*2);
-    snprintf(storePass, sizeOfStruct*2, "%s:%s:", struct_user, struct_pass);
+    snprintf(storePass, sizeOfStruct*2, "%s:%s", struct_user, struct_pass);
 
     const int key_size = 256; // AES-256 key size.
     unsigned char key[32];
     unsigned char iv[16];
 
     gen_key(key, key_size); // Generate a random encryption key.
-    gen_printable_iv(iv); // Generate a random initialization vector.
+    gen_printable_iv(iv); // Generate a random initialization vector
     getPadded(&storePass); // Pad the plaintext.
 
+
     int size = encrypt(&storePass, key, iv); // Encrypt Username and Password
+    printf("Storepass encrypted (Hex): ");
+    for (size_t i = 0; i < size; i++) {
+        printf("%02x", (unsigned char)storePass[i]);
+    }
+    printf("\n");
+    size_t new_size = encode64(&storePass, size); // Base64 encode encrypted Username and Password for storage
+    printf("Storepass encrypted (base64): ");
+    printf("%s\n", storePass);
 
     StoreKey(key, iv); // Encrypt and store key used to encrypt Username and Password
-
-    size_t new_size = encode64(&storePass, size); // Base64 encode encrypted Username and Password for storage
-
 
     FILE *file = fopen("./textfiles/password.txt", "w");
     if (file == NULL){
         free(storePass);
         return;
     }
+
     fwrite(storePass, new_size, 1, file);
     fclose(file);
 
