@@ -20,64 +20,20 @@ struct passwords
     char *password;
 };
 
-// Define this macro to enable seeded random values for testing purposes comment out to return to random.
-// #define USE_SEEDED_RANDOM
-
-// Function to seed the OpenSSL random number generator for testing purposes.
-void seed_random() {
-    const unsigned char seed[16] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10}; // Constant seed for reproducibility.
-    RAND_seed(seed, sizeof(seed));
-}
-
-#ifdef USE_SEEDED_RANDOM
-
-// Function to generate a fixed initialization vector (IV) for testing purposes.
-void gen_printable_iv(unsigned char* iv) {
-    // 16 printable ASCII characters (example: digits and uppercase)
-    const char printable_iv[17] = "1234ABCDEFGH5678";
-    memcpy(iv, printable_iv, 16);
-}
-
-// Function to generate a fixed encryption key for testing purposes.
-void gen_key(unsigned char* key, int key_size){
-    // 32 printable ASCII characters (example: all uppercase letters and digits)
-    const char printable_key[33] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456";
-    memcpy(key, printable_key, 32);
-}
-
-// Function to generate a fixed printable master key for testing purposes.
-void gen_masterkey(unsigned char* masterkey) {
-    // 32 printable ASCII characters (example: uppercase letters and lowercase letters)
-    const char printable_masterkey[33] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef";
-    memcpy(masterkey, printable_masterkey, 32);
-}
-
-#else
-// Function to generate a random initialization vector (IV) using OpenSSL's RAND_bytes.
-// The IV is critical for ensuring that the same plaintext encrypts to different ciphertexts.
 void gen_iv(unsigned char* iv){
-#ifdef USE_SEEDED_RANDOM
-    seed_random();
-#endif
     if (RAND_bytes(iv, 16) != 1) {
         fprintf(stderr, "Error generating IV\n");
         exit(EXIT_FAILURE);
     }
 }
 
-// Function to generate a random encryption key of the specified size (in bits).
-// Uses OpenSSL's RAND_bytes to ensure cryptographic randomness.
 void gen_key(unsigned char* key, int key_size){
-#ifdef USE_SEEDED_RANDOM
-    seed_random();
-#endif
     int key_size_bytes = key_size / 8; // Convert key size from bits to bytes.
     if (RAND_bytes(key, key_size_bytes) != 1){
         fprintf(stderr, "Error generating random key\n");
         exit(EXIT_FAILURE);
     }
 }
-#endif
 
 
 // Function to pad the plaintext to a multiple of 16 bytes.
@@ -307,14 +263,15 @@ void write_pass(char* struct_user, char* struct_pass){
 
     gen_key(key, key_size); // Generate a random encryption key.
 
-    #ifdef USE_SEEDED_RANDOM
-    unsigned char iv[16];
-    gen_printable_iv(iv); // Generate a random initialization vector
-    #else
+    printf("\nKEY BEFORE ENCRYPTION\n");
+    for (int i=0 ; i < 32; i++){
+        printf("%02x", key[i]);
+    }
+    printf("\n");
+
     unsigned char iv[17];
     gen_iv(iv);
     iv[16] = '\0';
-    #endif
     getPadded(&storePass); // Pad the plaintext.
 
 
