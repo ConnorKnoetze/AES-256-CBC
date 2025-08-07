@@ -1,31 +1,38 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <direct.h> // For _mkdir on Windows
+#define DATA_DIR "textfiles"
+
+void ensure_data_dir() {
+    _mkdir(DATA_DIR);
+}
 
 #include "decrypt.c"
 
 
 int main(){
-    FILE *masterkeyFile = fopen("./textfiles/masterkey.txt", "r");
+    ensure_data_dir();
+    FILE *masterkeyFile = fopen("textfiles/masterkey.txt", "r");
     if (masterkeyFile == NULL) {
         perror("Error opening file");
         return -1;
     }
-    FILE *keyFile = fopen("./textfiles/key.txt", "r");
+    FILE *keyFile = fopen("textfiles/key.txt", "r");
     if (keyFile == NULL) {
         perror("Error opening file");
         return -1;
     }
-    FILE *key_ivFile = fopen("./textfiles/key_iv.txt", "r");
+    FILE *key_ivFile = fopen("textfiles/key_iv.txt", "r");
     if (key_ivFile == NULL) {
         perror("Error opening file");
         return -1;
     }
-    FILE *ciphertextFile = fopen("./textfiles/password.txt", "r");
+    FILE *ciphertextFile = fopen("textfiles/password.txt", "r");
     if (ciphertextFile == NULL) {
         perror("Error opening file");
         return -1;
     }
-    FILE *pass_ivFile = fopen("./textfiles/pass_iv.txt", "r");
+    FILE *pass_ivFile = fopen("textfiles/pass_iv.txt", "r");
     if (pass_ivFile == NULL) {
         perror("Error opening file");
         return -1;
@@ -67,6 +74,22 @@ int main(){
     unsigned char* plaintext = decrypt(masterkey, key, key_iv, ciphertext, pass_iv,masterkey_size, key_size, iv_size, ciphertext_size, pass_iv_size);
 
     printf("%s", plaintext);
+    char output_path[128];
+    snprintf(output_path, sizeof(output_path), "%s/output.txt", DATA_DIR);
+    FILE *output = fopen(output_path, "w");
+    if (output == NULL){
+        free(masterkey);
+        free(key);  
+        free(pass_iv);
+        free(ciphertext);
+        free(key_iv);
+        return -1;
+    }
+
+    // Get the size of plaintext by calculating its length
+    size_t plaintext_size = strlen((char*)plaintext);
+
+    fwrite(plaintext, 1, plaintext_size, output);
 
     free(masterkey);
     free(key);  

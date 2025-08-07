@@ -20,19 +20,58 @@ This project is a password manager implemented in C. It uses AES-256 encryption 
 - `keys.txt`: Stores the Base64-encoded encryption keys.
 - `masterkey.txt`: Stores the master key used for encrypting the encryption keys.
 
-## How to Build and Run
 
-1. Build the program using the provided Makefile:
+## How to Build the Binaries (Windows, GCC)
 
-   ```bash
-   make
-   ```
+This branch organizes all output files in a `textfiles` directory at the project root. You can build the encryption and decryption binaries as follows:
 
-2. Run the program with the following command:
+### Build the Encryption Binary
 
-   ```bash
-   ./pass_manager <username> <password>
-   ```
+From the project root, run:
+
+```
+gcc -o encrypt/encrypt encrypt/encrypt.c -I. -lssl -lcrypto
+```
+
+This will produce `encrypt/encrypt.exe`.
+
+### Build the Decryption Binary
+
+From the project root, run:
+
+```
+gcc -o decrypt/tester decrypt/tester.c -I. -lssl -lcrypto
+```
+
+This will produce `decrypt/tester.exe`.
+
+### Requirements
+
+- GCC compiler (MinGW or MSYS2 recommended for Windows)
+- OpenSSL development libraries (ensure `-lssl -lcrypto` are available)
+
+### Usage
+
+**Encryption:**
+
+```
+encrypt/encrypt <username> <password>
+```
+
+This will generate encrypted files in the `textfiles` directory.
+
+**Decryption:**
+
+```
+decrypt/tester
+```
+
+This will read from the files in `textfiles` and print the decrypted username and password.
+
+### Notes
+
+- All output and input files are stored in the `textfiles` directory at the project root.
+- If you encounter header file errors, add `-I.` to your GCC command to include the current directory.
 
 ## Requirements
 
