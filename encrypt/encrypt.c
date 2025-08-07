@@ -20,64 +20,30 @@ struct passwords
     char *password;
 };
 
-// Define this macro to enable seeded random values for testing purposes comment out to return to random.
-// #define USE_SEEDED_RANDOM
-
-// Function to seed the OpenSSL random number generator for testing purposes.
-void seed_random() {
-    const unsigned char seed[16] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10}; // Constant seed for reproducibility.
-    RAND_seed(seed, sizeof(seed));
-}
-
-#ifdef USE_SEEDED_RANDOM
-
-// Function to generate a fixed initialization vector (IV) for testing purposes.
-void gen_printable_iv(unsigned char* iv) {
-    // 16 printable ASCII characters (example: digits and uppercase)
-    const char printable_iv[17] = "1234ABCDEFGH5678";
-    memcpy(iv, printable_iv, 16);
-}
-
-// Function to generate a fixed encryption key for testing purposes.
-void gen_key(unsigned char* key, int key_size){
-    // 32 printable ASCII characters (example: all uppercase letters and digits)
-    const char printable_key[33] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ123456";
-    memcpy(key, printable_key, 32);
-}
-
-// Function to generate a fixed printable master key for testing purposes.
-void gen_masterkey(unsigned char* masterkey) {
-    // 32 printable ASCII characters (example: uppercase letters and lowercase letters)
-    const char printable_masterkey[33] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef";
-    memcpy(masterkey, printable_masterkey, 32);
-}
-
-#else
-// Function to generate a random initialization vector (IV) using OpenSSL's RAND_bytes.
-// The IV is critical for ensuring that the same plaintext encrypts to different ciphertexts.
 void gen_iv(unsigned char* iv){
-#ifdef USE_SEEDED_RANDOM
-    seed_random();
-#endif
     if (RAND_bytes(iv, 16) != 1) {
         fprintf(stderr, "Error generating IV\n");
         exit(EXIT_FAILURE);
     }
 }
 
-// Function to generate a random encryption key of the specified size (in bits).
-// Uses OpenSSL's RAND_bytes to ensure cryptographic randomness.
 void gen_key(unsigned char* key, int key_size){
-#ifdef USE_SEEDED_RANDOM
-    seed_random();
-#endif
     int key_size_bytes = key_size / 8; // Convert key size from bits to bytes.
-    if (RAND_bytes(key, key_size_bytes) != 1){
-        fprintf(stderr, "Error generating random key\n");
-        exit(EXIT_FAILURE);
+    int valid = 0;
+    while (!valid) {
+        if (RAND_bytes(key, key_size_bytes) != 1){
+            fprintf(stderr, "Error generating random key\n");
+            exit(EXIT_FAILURE);
+        }
+        valid = 1;
+        for (int i = 0; i < key_size_bytes; i++) {
+            if (key[i] == 0x00) {
+                valid = 0;
+                break;
+            }
+        }
     }
 }
-#endif
 
 
 // Function to pad the plaintext to a multiple of 16 bytes.
@@ -133,18 +99,22 @@ void StoreKey(unsigned char* key) {
 
     decode_base64(masterkey_array, &decoded_masterkey_array, &size);
 
-    char* key_chars = (char*)malloc(33);
+
+    // Use a fixed buffer for the key, always 32 bytes for AES-256
+    char* key_chars = (char*)malloc(48); // 32 bytes + possible padding
     if (key_chars == NULL) {
         fprintf(stderr, "Memory allocation failed\n");
         return;
     }
-    for (int i = 0; i < 32; i++) {
-        key_chars[i] = (char)key[i];
-    }
-    key_chars[32] = '\0';
+    memcpy(key_chars, key, 32);
+    // No null terminator, treat as binary
 
-    getPadded(&key_chars);
-    size_t padded_len = strlen(key_chars); 
+    // Pad to 48 bytes for encryption (PKCS#7 style)
+    int pad = 16;
+    for (int i = 0; i < pad; i++) {
+        key_chars[32 + i] = (char)pad;
+    }
+    size_t padded_len = 32 + pad;
 
     for (size_t i = 0; i < padded_len; i++) {
         printf("%02x", (unsigned char)key_chars[i]);
@@ -159,7 +129,7 @@ void StoreKey(unsigned char* key) {
     }
     printf("\n");
 
-    int new_size = encode64(&key_chars, 48);
+    int new_size = encode64(&key_chars, padded_len);
 
     printf("encrypted key (base64): ");
     printf("%s\n", key_chars);
@@ -209,7 +179,9 @@ void StoreKey(unsigned char* key) {
 int encrypt(char** buffer, unsigned char* key, unsigned char* iv) {
     const int block_size = 16; // AES block size.
 
-    int num_blocks = ((int)strlen(*buffer) + block_size - 1) / block_size; // Calculate the number of blocks.
+    // Only use strlen for null-terminated ASCII input, not for binary data
+    size_t input_len = strlen(*buffer); // Only valid for plaintext
+    int num_blocks = ((int)input_len + block_size - 1) / block_size; // Calculate the number of blocks.
 
     unsigned char states[num_blocks][4][4]; // Array to hold the state matrices for each block.
 
@@ -219,7 +191,7 @@ int encrypt(char** buffer, unsigned char* key, unsigned char* iv) {
     for (int i = 0; i < num_blocks; i++) {
         for (int j = 0; j < 4; j++) {
             for (int y = 0; y < 4; y++) {
-                if (x < (int)strlen(*buffer)) {
+                if (x < (int)input_len) {
                     states[i][y][j] = (unsigned char)(*buffer)[x];
                 } else {
                     states[i][y][j] = 0; // Pad with zeros if necessary.
@@ -307,14 +279,15 @@ void write_pass(char* struct_user, char* struct_pass){
 
     gen_key(key, key_size); // Generate a random encryption key.
 
-    #ifdef USE_SEEDED_RANDOM
-    unsigned char iv[16];
-    gen_printable_iv(iv); // Generate a random initialization vector
-    #else
+    printf("\nKEY BEFORE ENCRYPTION\n");
+    for (int i=0 ; i < 32; i++){
+        printf("%02x", key[i]);
+    }
+    printf("\n");
+
     unsigned char iv[17];
     gen_iv(iv);
     iv[16] = '\0';
-    #endif
     getPadded(&storePass); // Pad the plaintext.
 
 
