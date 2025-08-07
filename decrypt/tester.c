@@ -15,13 +15,18 @@ int main(){
         perror("Error opening file");
         return -1;
     }
-    FILE *ivFile = fopen("./textfiles/iv.txt", "r");
-    if (ivFile == NULL) {
+    FILE *key_ivFile = fopen("./textfiles/key_iv.txt", "r");
+    if (key_ivFile == NULL) {
         perror("Error opening file");
         return -1;
     }
     FILE *ciphertextFile = fopen("./textfiles/password.txt", "r");
     if (ciphertextFile == NULL) {
+        perror("Error opening file");
+        return -1;
+    }
+    FILE *pass_ivFile = fopen("./textfiles/pass_iv.txt", "r");
+    if (pass_ivFile == NULL) {
         perror("Error opening file");
         return -1;
     }
@@ -34,32 +39,40 @@ int main(){
     long key_size = ftell(keyFile)+ 1;
     rewind(keyFile);
 
-    fseek(ivFile, 0, SEEK_END);
-    long iv_size = ftell(ivFile) + 1;
-    rewind(ivFile);
+    fseek(key_ivFile, 0, SEEK_END);
+    long iv_size = ftell(key_ivFile) + 1;
+    rewind(key_ivFile);
 
     fseek(ciphertextFile, 0, SEEK_END);
     long ciphertext_size = ftell(ciphertextFile)+ 1;
     rewind(ciphertextFile);
 
+    fseek(pass_ivFile, 0, SEEK_END);
+    long pass_iv_size = ftell(pass_ivFile)+ 1;
+    rewind(pass_ivFile);
+
     char *masterkey = (char *)malloc(masterkey_size);
     char *key = (char *)malloc(key_size);
-    char *iv = (char *)malloc(iv_size);
+    char *key_iv = (char *)malloc(iv_size);
     char *ciphertext = (char *)malloc(ciphertext_size);
+    char *pass_iv = (char *)malloc(pass_iv_size);
 
     while(fgets(masterkey, masterkey_size, masterkeyFile)){};
     while(fgets(key, key_size, keyFile)){};
-    while(fgets(iv, iv_size, ivFile)){};
+    while(fgets(key_iv, iv_size, key_ivFile)){};
     while(fgets(ciphertext, ciphertext_size, ciphertextFile)){};
+    while(fgets(pass_iv, pass_iv_size, pass_ivFile)){};
 
-    unsigned char* plaintext = decrypt(masterkey, key, iv, ciphertext, masterkey_size, key_size, iv_size, ciphertext_size);
+
+    unsigned char* plaintext = decrypt(masterkey, key, key_iv, ciphertext, pass_iv,masterkey_size, key_size, iv_size, ciphertext_size, pass_iv_size);
 
     printf("%s", plaintext);
 
     free(masterkey);
     free(key);  
-    free(iv);
+    free(pass_iv);
     free(ciphertext);
+    free(key_iv);
 
     return 1;
 }

@@ -8,7 +8,8 @@
 #include <openssl/rand.h>
 #include <openssl/evp.h>
 
-unsigned char* decrypt(char *masterkey, char *key, char *iv, char *ciphertext, size_t masterkey_size, size_t key_size, size_t iv_size, size_t ciphertext_size);
+unsigned char* decrypt(char *masterkey, char *key, char *iv, char *ciphertext, char *pass_iv,
+            size_t masterkey_size, size_t key_size, size_t iv_size, size_t ciphertext_size, size_t pass_iv_size);
 void cbc_init(unsigned char (*state)[4][4], unsigned char *key);
 void cbc_init(unsigned char (*plaintext)[4][4], unsigned char* iv);
 void cbc_main(unsigned char (*plaintext)[4][4], unsigned char prev[4][4]);
@@ -142,23 +143,25 @@ void perform_AES(unsigned char** ciphertext, size_t ciphertext_size, unsigned ch
 
 // Function to decrypt the password using the master key, key, IV, and ciphertext
 // This function decodes the Base64 encoded strings, decrypts the ciphertext.
-unsigned char* decrypt(char *masterkey, char *key, char *iv, char *ciphertext,
-             size_t masterkey_size, size_t key_size, size_t iv_size, size_t ciphertext_size) {
+unsigned char* decrypt(char *masterkey, char *key, char *key_iv, char *ciphertext, char *pass_iv,
+             size_t masterkey_size, size_t key_size, size_t iv_size, size_t ciphertext_size, size_t pass_iv_size) {
     // Only declare pointers, let decode_base64 allocate memory
     unsigned char *decoded_masterkey = NULL;
     unsigned char *decoded_key = NULL;
-    unsigned char *decoded_iv = NULL;
+    unsigned char *decoded_key_iv = NULL;
     unsigned char *decoded_ciphertext = NULL;
-    size_t decoded_masterkey_size, decoded_key_size, decoded_iv_size, decoded_ciphertext_size;
+    unsigned char *decoded_pass_iv = NULL;
+    size_t decoded_masterkey_size, decoded_key_size, decoded_iv_size, decoded_ciphertext_size, decoded_pass_iv_size;
 
     decode_base64(masterkey, &decoded_masterkey, &decoded_masterkey_size);
     decode_base64(key, &decoded_key, &decoded_key_size);
-    decode_base64(iv, &decoded_iv, &decoded_iv_size);
+    decode_base64(key_iv, &decoded_key_iv, &decoded_iv_size);
     decode_base64(ciphertext, &decoded_ciphertext, &decoded_ciphertext_size);
+    decode_base64(pass_iv, &decoded_pass_iv, &decoded_pass_iv_size);
 
     // Decrypt the key using the master key and IV (if that's your design)
     // If not, skip this step and use decoded_key directly
-    perform_AES(&decoded_key, decoded_key_size, decoded_masterkey, decoded_iv);
+    perform_AES(&decoded_key, decoded_key_size, decoded_masterkey, decoded_key_iv);
 
     unsigned char pad = decoded_key[ciphertext_size - 1];
     
@@ -174,7 +177,7 @@ unsigned char* decrypt(char *masterkey, char *key, char *iv, char *ciphertext,
     decoded_key[decoded_key_size] = '\0';
 
     // Decrypt the ciphertext using the key and IV
-    perform_AES(&decoded_ciphertext, decoded_ciphertext_size, decoded_key, decoded_iv);
+    perform_AES(&decoded_ciphertext, decoded_ciphertext_size, decoded_key, decoded_pass_iv);
 
     pad = decoded_ciphertext[decoded_ciphertext_size - 1];
     
@@ -191,8 +194,9 @@ unsigned char* decrypt(char *masterkey, char *key, char *iv, char *ciphertext,
 
     free(decoded_masterkey);
     free(decoded_key);
-    free(decoded_iv);
+    free(decoded_key_iv);
     free(decoded_ciphertext);
+    free(decoded_pass_iv);
 
     return decoded_ciphertext;
 }
