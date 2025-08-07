@@ -29,9 +29,19 @@ void gen_iv(unsigned char* iv){
 
 void gen_key(unsigned char* key, int key_size){
     int key_size_bytes = key_size / 8; // Convert key size from bits to bytes.
-    if (RAND_bytes(key, key_size_bytes) != 1){
-        fprintf(stderr, "Error generating random key\n");
-        exit(EXIT_FAILURE);
+    int valid = 0;
+    while (!valid) {
+        if (RAND_bytes(key, key_size_bytes) != 1){
+            fprintf(stderr, "Error generating random key\n");
+            exit(EXIT_FAILURE);
+        }
+        valid = 1;
+        for (int i = 0; i < key_size_bytes; i++) {
+            if (key[i] == 0x00) {
+                valid = 0;
+                break;
+            }
+        }
     }
 }
 
@@ -89,18 +99,22 @@ void StoreKey(unsigned char* key) {
 
     decode_base64(masterkey_array, &decoded_masterkey_array, &size);
 
-    char* key_chars = (char*)malloc(33);
+
+    // Use a fixed buffer for the key, always 32 bytes for AES-256
+    char* key_chars = (char*)malloc(48); // 32 bytes + possible padding
     if (key_chars == NULL) {
         fprintf(stderr, "Memory allocation failed\n");
         return;
     }
-    for (int i = 0; i < 32; i++) {
-        key_chars[i] = (char)key[i];
-    }
-    key_chars[32] = '\0';
+    memcpy(key_chars, key, 32);
+    // No null terminator, treat as binary
 
-    getPadded(&key_chars);
-    size_t padded_len = strlen(key_chars); 
+    // Pad to 48 bytes for encryption (PKCS#7 style)
+    int pad = 16;
+    for (int i = 0; i < pad; i++) {
+        key_chars[32 + i] = (char)pad;
+    }
+    size_t padded_len = 32 + pad;
 
     for (size_t i = 0; i < padded_len; i++) {
         printf("%02x", (unsigned char)key_chars[i]);
@@ -115,7 +129,7 @@ void StoreKey(unsigned char* key) {
     }
     printf("\n");
 
-    int new_size = encode64(&key_chars, 48);
+    int new_size = encode64(&key_chars, padded_len);
 
     printf("encrypted key (base64): ");
     printf("%s\n", key_chars);
@@ -165,7 +179,9 @@ void StoreKey(unsigned char* key) {
 int encrypt(char** buffer, unsigned char* key, unsigned char* iv) {
     const int block_size = 16; // AES block size.
 
-    int num_blocks = ((int)strlen(*buffer) + block_size - 1) / block_size; // Calculate the number of blocks.
+    // Only use strlen for null-terminated ASCII input, not for binary data
+    size_t input_len = strlen(*buffer); // Only valid for plaintext
+    int num_blocks = ((int)input_len + block_size - 1) / block_size; // Calculate the number of blocks.
 
     unsigned char states[num_blocks][4][4]; // Array to hold the state matrices for each block.
 
@@ -175,7 +191,7 @@ int encrypt(char** buffer, unsigned char* key, unsigned char* iv) {
     for (int i = 0; i < num_blocks; i++) {
         for (int j = 0; j < 4; j++) {
             for (int y = 0; y < 4; y++) {
-                if (x < (int)strlen(*buffer)) {
+                if (x < (int)input_len) {
                     states[i][y][j] = (unsigned char)(*buffer)[x];
                 } else {
                     states[i][y][j] = 0; // Pad with zeros if necessary.
