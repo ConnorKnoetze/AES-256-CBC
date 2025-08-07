@@ -21,15 +21,15 @@ struct passwords
 };
 
 // Define this macro to enable seeded random values for testing purposes comment out to return to random.
-#define USE_SEEDED_RANDOM
-
-#ifdef USE_SEEDED_RANDOM
+// #define USE_SEEDED_RANDOM
 
 // Function to seed the OpenSSL random number generator for testing purposes.
 void seed_random() {
     const unsigned char seed[16] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10}; // Constant seed for reproducibility.
     RAND_seed(seed, sizeof(seed));
 }
+
+#ifdef USE_SEEDED_RANDOM
 
 // Function to generate a fixed initialization vector (IV) for testing purposes.
 void gen_printable_iv(unsigned char* iv) {
@@ -107,7 +107,10 @@ void getPadded(char** buffer) {
 
 // Function to store key used in instance to encrypt password.
 // Using a Master key
-void StoreKey(unsigned char* key, unsigned char* iv) {
+void StoreKey(unsigned char* key) {
+    unsigned char iv[17];
+    gen_iv(iv);
+
     char* masterkey_array = (char*)malloc(45);
 
     FILE *file = fopen("./textfiles/masterkey.txt", "r");
@@ -156,8 +159,10 @@ void StoreKey(unsigned char* key, unsigned char* iv) {
     }
     printf("\n");
 
-
     int new_size = encode64(&key_chars, 48);
+
+    printf("encrypted key (base64): ");
+    printf("%s\n", key_chars);
 
     FILE *file1 = fopen("./textfiles/key.txt", "w");
     if (file1 == NULL) {
@@ -179,8 +184,10 @@ void StoreKey(unsigned char* key, unsigned char* iv) {
     memcpy(stored_iv, iv, 16);
 
     size_t new_iv_size = encode64(&stored_iv, 16); // Encode the stored key in Base64 format.
+    printf("iv (base64): ");
+    printf("%s\n", stored_iv);
 
-    FILE *file2 = fopen("./textfiles/iv.txt", "w");
+    FILE *file2 = fopen("./textfiles/key_iv.txt", "w");
     if (file2 == NULL){
         free(masterkey_array);
         free(decoded_masterkey_array);
@@ -194,9 +201,7 @@ void StoreKey(unsigned char* key, unsigned char* iv) {
     fclose(file2);
 
     free(masterkey_array);
-    free(decoded_masterkey_array);
     free(stored_iv);
-    free(key_chars); // Free the allocated memory after use.
 }
 
 // Function to encrypt a plaintext string using AES in CBC mode.
@@ -237,11 +242,6 @@ int encrypt(char** buffer, unsigned char* key, unsigned char* iv) {
         memcpy(prev, states[i], sizeof(prev)); // Update the previous block.
     }
 
-    // for (int i = 0; i < num_blocks; i++) {
-    //     AES_Encrypt(&states[i], key);
-    // }
-
-
     // Flatten the state matrices back into a single array.
     unsigned char* arr = (unsigned char*)malloc(num_blocks * block_size);
     if (arr == NULL) {
@@ -274,7 +274,6 @@ int encrypt(char** buffer, unsigned char* key, unsigned char* iv) {
 }
 
 
-
 void cbc_main(unsigned char (*plaintext)[4][4], unsigned char prev[4][4]){
     for (int y = 0; y < 4; y++) {
         for (int j = 0; j < 4; j++) {
@@ -298,31 +297,65 @@ void write_pass(char* struct_user, char* struct_pass){
 
     sizeOfStruct = strlen(struct_user) + strlen(struct_pass);
 
+    printf("%d\n",sizeOfStruct);
+
     char *storePass = (char*)malloc(sizeof(char) * sizeOfStruct*2);
-    snprintf(storePass, sizeOfStruct*2, "%s:%s:", struct_user, struct_pass);
+    snprintf(storePass, sizeOfStruct*2, "%s:%s", struct_user, struct_pass);
 
     const int key_size = 256; // AES-256 key size.
     unsigned char key[32];
-    unsigned char iv[16];
 
     gen_key(key, key_size); // Generate a random encryption key.
-    gen_printable_iv(iv); // Generate a random initialization vector.
+
+    #ifdef USE_SEEDED_RANDOM
+    unsigned char iv[16];
+    gen_printable_iv(iv); // Generate a random initialization vector
+    #else
+    unsigned char iv[17];
+    gen_iv(iv);
+    iv[16] = '\0';
+    #endif
     getPadded(&storePass); // Pad the plaintext.
 
+
     int size = encrypt(&storePass, key, iv); // Encrypt Username and Password
-
-    StoreKey(key, iv); // Encrypt and store key used to encrypt Username and Password
-
+    printf("Storepass encrypted (Hex): ");
+    for (size_t i = 0; i < (size_t)size; i++) {
+        printf("%02x", (unsigned char)storePass[i]);
+    }
+    printf("\n");
     size_t new_size = encode64(&storePass, size); // Base64 encode encrypted Username and Password for storage
+    printf("Storepass encrypted (base64): ");
+    printf("%s\n", storePass);
 
+    StoreKey(key); // Encrypt and store key used to encrypt Username and Password
 
-    FILE *file = fopen("./textfiles/password.txt", "w");
-    if (file == NULL){
+    FILE *passwordFile = fopen("./textfiles/password.txt", "w");
+    if (passwordFile == NULL){
         free(storePass);
         return;
     }
-    fwrite(storePass, new_size, 1, file);
-    fclose(file);
+
+    fwrite(storePass, new_size, 1, passwordFile);
+    fclose(passwordFile);
+
+    char *pass_iv = (char*)malloc(16);
+    if (pass_iv == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        return;
+    }
+    memcpy(pass_iv, iv, 16);
+
+    size_t new_iv_size = encode64(&pass_iv, 16); // Encode the stored key in Base64 format.
+    printf("iv (base64): ");
+    printf("%s\n", pass_iv);
+
+    FILE *ivFile = fopen("./textfiles/pass_iv.txt", "w");
+    if (ivFile == NULL){
+        free(storePass);
+        return;
+    }
+    fwrite(pass_iv, 1, new_iv_size, ivFile);
 
     free(storePass);
 }
