@@ -6,19 +6,29 @@ CFLAGS = -g -Wall -fdiagnostics-color=always
 OPENSSL_LIB = /ucrt64/lib
 OPENSSL_INCLUDE = /ucrt64/include
 
-# Output binary
-TARGET = ./encrypt/encrypt.exe
+
+# Output binaries
+ENCRYPT_TARGET = ./encrypt/encrypt.exe
+DECRYPT_TARGET = ./decrypt/decrypt.exe
 
 # Source files
-SRCS = ./encrypt/encrypt.c
-encrypt: 
-	$(CC) $(CFLAGS) -I$(OPENSSL_INCLUDE) -L$(OPENSSL_LIB) -o $(TARGET) ./encrypt/encrypt.c -lcrypto -lssl
+ENCRYPT_SRCS = ./encrypt/encrypt.c
+DECRYPT_SRCS = ./decrypt/decrypt.c
+
+encrypt:
+	$(CC) $(CFLAGS) -I$(OPENSSL_INCLUDE) -L$(OPENSSL_LIB) -o $(ENCRYPT_TARGET) $(ENCRYPT_SRCS) -lcrypto -lssl
+
+decrypt:
+	$(CC) $(CFLAGS) -I$(OPENSSL_INCLUDE) -L$(OPENSSL_LIB) -o $(DECRYPT_TARGET) $(DECRYPT_SRCS) -lcrypto -lssl
 
 # Build target
-all: $(TARGET)
+all: encrypt decrypt
 
-$(TARGET): $(SRCS)
-	$(CC) $(CFLAGS) -I$(OPENSSL_INCLUDE) -L$(OPENSSL_LIB) -o $(TARGET) $(SRCS) -lcrypto -lssl
+$(ENCRYPT_TARGET): $(ENCRYPT_SRCS)
+	$(CC) $(CFLAGS) -I$(OPENSSL_INCLUDE) -L$(OPENSSL_LIB) -o $(ENCRYPT_TARGET) $(ENCRYPT_SRCS) -lcrypto -lssl
+
+$(DECRYPT_TARGET): $(DECRYPT_SRCS)
+	$(CC) $(CFLAGS) -I$(OPENSSL_INCLUDE) -L$(OPENSSL_LIB) -o $(DECRYPT_TARGET) $(DECRYPT_SRCS) -lcrypto -lssl
 
 # Test target
 test: test.c
@@ -30,5 +40,6 @@ tester: ./decrypt/tester.c
 
 # Clean up
 clean:
+	rm -f $(TARGET) ./decrypt/decrypt.exe
 	rm -f $(TARGET) ./decrypt/tester.exe
 	rm -f $(TARGET) ./encrypt/encrypt.exe
