@@ -262,7 +262,7 @@ void write_pass(char* struct_user, char* struct_pass){
     ensure_data_dir();
     int sizeOfStruct = 0;
 
-    sizeOfStruct = strlen(struct_user) + strlen(struct_pass);
+    sizeOfStruct = strlen(struct_user) + strlen(struct_pass) + 1;
 
     printf("%d\n",sizeOfStruct);
 

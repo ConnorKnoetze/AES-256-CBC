@@ -3,36 +3,31 @@
 #include <direct.h> // For _mkdir on Windows
 #define DATA_DIR "textfiles"
 
-void ensure_data_dir() {
-    _mkdir(DATA_DIR);
-}
-
 #include "decrypt.c"
 
 
 int main(){
-    ensure_data_dir();
-    FILE *masterkeyFile = fopen("textfiles/masterkey.txt", "r");
+    FILE *masterkeyFile = fopen("./AES/textfiles/masterkey.txt", "r");
     if (masterkeyFile == NULL) {
         perror("Error opening file");
         return -1;
     }
-    FILE *keyFile = fopen("textfiles/key.txt", "r");
+    FILE *keyFile = fopen("./AES/textfiles/key.txt", "r");
     if (keyFile == NULL) {
         perror("Error opening file");
         return -1;
     }
-    FILE *key_ivFile = fopen("textfiles/key_iv.txt", "r");
+    FILE *key_ivFile = fopen("./AES/textfiles/key_iv.txt", "r");
     if (key_ivFile == NULL) {
         perror("Error opening file");
         return -1;
     }
-    FILE *ciphertextFile = fopen("textfiles/password.txt", "r");
+    FILE *ciphertextFile = fopen("./AES/textfiles/password.txt", "r");
     if (ciphertextFile == NULL) {
         perror("Error opening file");
         return -1;
     }
-    FILE *pass_ivFile = fopen("textfiles/pass_iv.txt", "r");
+    FILE *pass_ivFile = fopen("./AES/textfiles/pass_iv.txt", "r");
     if (pass_ivFile == NULL) {
         perror("Error opening file");
         return -1;
@@ -73,7 +68,6 @@ int main(){
 
     unsigned char* plaintext = decrypt(masterkey, key, key_iv, ciphertext, pass_iv,masterkey_size, key_size, iv_size, ciphertext_size, pass_iv_size);
 
-    printf("%s", plaintext);
     char output_path[128];
     snprintf(output_path, sizeof(output_path), "%s/output.txt", DATA_DIR);
     FILE *output = fopen(output_path, "w");
@@ -96,6 +90,8 @@ int main(){
     free(pass_iv);
     free(ciphertext);
     free(key_iv);
+
+    printf("%s\n", plaintext);
 
     return 1;
 }
