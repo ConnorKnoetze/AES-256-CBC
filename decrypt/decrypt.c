@@ -5,8 +5,9 @@
 #include "../encrypt/encode64.h"
 #include "AES_Decrypt.h"
 
-#include <openssl/rand.h>
-#include <openssl/evp.h>
+#include <direct.h>
+#define DATA_DIR "textfiles"
+
 
 unsigned char* decrypt(char *masterkey, char *key, char *iv, char *ciphertext, char *pass_iv,
             size_t masterkey_size, size_t key_size, size_t iv_size, size_t ciphertext_size, size_t pass_iv_size);
@@ -17,68 +18,6 @@ void cbc_main(unsigned char (*plaintext)[4][4], unsigned char prev[4][4]);
 void perform_AES(unsigned char** ciphertext, size_t ciphertext_size, unsigned char* key, unsigned char *iv);
 
 // #define MAINACTIVE;
-// #define MAIN2ACTIVE;
-#ifdef MAINACTIVE
-void test_perform_AES() {
-    // Provided masterkey (ASCII): "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef"
-    unsigned char masterkey[32] = {
-        'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P',
-        'Q','R','S','T','U','V','W','X','Y','Z','a','b','c','d','e','f'
-    };
-    // Example IV: "1234ABCDEFGH5678"
-    unsigned char iv[16] = {
-        '1','2','3','4','A','B','C','D','E','F','G','H','5','6','7','8'
-    };
-    // Provided ciphertext (hex) for CBC mode test
-    unsigned char ciphertext[48] = {
-        0xc7,0x8b,0xb7,0x0a,0xd6,0x34,0x19,0xf0,
-        0xa7,0xa9,0xc0,0xf8,0x5f,0x4a,0x11,0xdb,
-        0x85,0x47,0x4c,0x50,0xee,0x4e,0x43,0x37,
-        0x4c,0xad,0x6b,0x0e,0x01,0xa5,0xa5,0x72,
-        0x48,0x36,0xd3,0x4e,0xc3,0xcb,0xc1,0x0f,
-        0xbf,0x44,0xd9,0xa8,0xfd,0x01,0xaa,0x1a
-    };
-    size_t ciphertext_size = 48;
-
-    unsigned char* ciphertext_ptr = (unsigned char*)malloc(ciphertext_size);
-    memcpy(ciphertext_ptr, ciphertext, ciphertext_size);
-
-    printf("Test vector: Decrypting ciphertext with perform_AES...\n");
-    perform_AES(&ciphertext_ptr, ciphertext_size, masterkey, iv);
-
-    printf("Decrypted output (hex):\n");
-    for (size_t i = 0; i < ciphertext_size; i++) {
-        printf("%02x", ciphertext_ptr[i]);
-    }
-    printf("\n");
-
-    printf("Decrypted output (ASCII):\n");
-    for (size_t i = 0; i < ciphertext_size; i++) {
-        if (ciphertext_ptr[i] >= 32 && ciphertext_ptr[i] <= 126)
-            printf("%c", ciphertext_ptr[i]);
-        else
-            printf(".");
-    }
-    printf("\n");
-
-    unsigned char pad = ciphertext_ptr[ciphertext_size - 1];
-    
-    int remove_pad = 0;
-    for (int i = ciphertext_size - 1; i >= 0; i--){
-        if(ciphertext_ptr[i] == pad){
-            remove_pad++;
-        }
-    }
-
-    ciphertext_size -= remove_pad;
-    ciphertext_ptr = (unsigned char*)realloc(ciphertext_ptr, ciphertext_size + 1);
-    ciphertext_ptr[ciphertext_size] = '\0';
-
-    printf("%s", ciphertext_ptr);
-
-    free(ciphertext_ptr);
-}
-#endif
 
 void perform_AES(unsigned char** ciphertext, size_t ciphertext_size, unsigned char* key, unsigned char *iv){
     const int block_size = 16;
@@ -220,31 +159,56 @@ void cbc_main(unsigned char (*plaintext)[4][4], unsigned char prev[4][4]){
 }
 
 #ifdef MAINACTIVE
-#include <stdio.h>
-int main() {
-    test_perform_AES();
-    return 0;
-}
-#endif
-
-#ifdef MAIN2ACTIVE
 int main(int argc, char *argv[]) {
-    if (argc != 9){
-        fprintf(stderr, "Usage: %s <masterkey> <key> <iv> <ciphertext> <msize> <ksize> <ivsize> <csize>\n", argv[0]);
+    if (argc != 11){
+        fprintf(stderr, "Usage: %s <masterkey> <key> <keyiv> <ciphertext> <passiv> <msize> <ksize> <keyivsize> <csize> <passivsize>\n", argv[0]);
         return EXIT_FAILURE;
     }
 
-    int msize=(int)argv[5], ksize=(int)argv[6], ivsize=(int)argv[7], csize=(int)argv[8];
-    char MASTERKEY[msize], KEY[ksize], IV[ivsize], CIPHERTEXT[csize];
+    int msize = atoi(argv[6]), ksize = atoi(argv[7]), ivsize = atoi(argv[8]), csize = atoi(argv[9]), passivsize = atoi(argv[10]);
+    char MASTERKEY[msize + 1], KEY[ksize + 1], KEYIV[ivsize + 1], CIPHERTEXT[csize + 1], PASSIV[passivsize + 1];
 
     strncpy(MASTERKEY, argv[1], msize);
+    MASTERKEY[msize] = '\0';
     strncpy(KEY, argv[2], ksize);
-    strncpy(IV, argv[3], ivsize);
+    KEY[ksize] = '\0';
+    strncpy(KEYIV, argv[3], ivsize);
+    KEYIV[ivsize] = '\0';
     strncpy(CIPHERTEXT, argv[4], csize);
+    CIPHERTEXT[csize] = '\0';
+    strncpy(PASSIV, argv[5], passivsize);
+    PASSIV[passivsize] = '\0';
 
-    printf("%s, %s, %s, %s\n", MASTERKEY, KEY, IV, CIPHERTEXT);
+    // printf("%s, %s, %s, %s\n", MASTERKEY, KEY, KEYIV, CIPHERTEXT);
 
-    decrypt(MASTERKEY, KEY, IV, CIPHERTEXT, msize, ksize, ivsize, csize);
+    char *plaintext = decrypt(MASTERKEY, KEY, KEYIV, CIPHERTEXT, PASSIV, msize, ksize, ivsize, csize, passivsize);
 
+    char output_path[256];
+    snprintf(output_path, sizeof(output_path), "%s/output.txt", DATA_DIR);
+    FILE *output = fopen(output_path, "w");
+    if (output == NULL){
+        free(MASTERKEY);
+        free(KEY);
+        free(CIPHERTEXT);
+        free(PASSIV);
+        free(KEYIV);
+        perror("Error opening output.txt");
+        return -1;
+    }
+
+    // Get the size of plaintext by calculating its length
+    size_t plaintext_size = strlen((char*)plaintext);
+
+    fwrite(plaintext, 1, plaintext_size, output);
+    fclose(output);
+
+    free(MASTERKEY);
+    free(KEY);
+    free(CIPHERTEXT);
+    free(PASSIV);
+    free(KEYIV);
+    free(plaintext);
+
+    return 0;
 }
 #endif

@@ -1,3 +1,9 @@
+#include <direct.h> // For _mkdir on Windows
+#define DATA_DIR "textfiles"
+
+void ensure_data_dir() {
+    _mkdir(DATA_DIR);
+}
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,12 +19,6 @@
 void cbc_init(unsigned char (*plaintext)[4][4], unsigned char* iv);
 void cbc_main(unsigned char (*plaintext)[4][4], unsigned char prev[4][4]);
 int encrypt(char** storePass, unsigned char* key, unsigned char* iv);
-
-struct passwords 
-{
-    char *username;
-    char *password;
-};
 
 void gen_iv(unsigned char* iv){
     if (RAND_bytes(iv, 16) != 1) {
@@ -79,26 +79,24 @@ void StoreKey(unsigned char* key) {
 
     char* masterkey_array = (char*)malloc(45);
 
-    FILE *file = fopen("./textfiles/masterkey.txt", "r");
+    char masterkey_path[128];
+    snprintf(masterkey_path, sizeof(masterkey_path), "%s/masterkey.txt", DATA_DIR);
+    FILE *file = fopen(masterkey_path, "r");
     if (file == NULL) {
         perror("Error opening file");
         return;
     }
-
     while (fgets(masterkey_array, 45, file) != NULL) {}
     fclose(file);
 
     size_t size = (3 * 45) / 4 - 2; // Size of decoded master key
-
     unsigned char *decoded_masterkey_array = (unsigned char *)malloc(size);
     if (decoded_masterkey_array == NULL) {
         fprintf(stderr, "Memory allocation failed\n");
         free(masterkey_array);
         return;
     }
-
     decode_base64(masterkey_array, &decoded_masterkey_array, &size);
-
 
     // Use a fixed buffer for the key, always 32 bytes for AES-256
     char* key_chars = (char*)malloc(48); // 32 bytes + possible padding
@@ -108,56 +106,49 @@ void StoreKey(unsigned char* key) {
     }
     memcpy(key_chars, key, 32);
     // No null terminator, treat as binary
-
     // Pad to 48 bytes for encryption (PKCS#7 style)
     int pad = 16;
     for (int i = 0; i < pad; i++) {
         key_chars[32 + i] = (char)pad;
     }
     size_t padded_len = 32 + pad;
-
     for (size_t i = 0; i < padded_len; i++) {
         printf("%02x", (unsigned char)key_chars[i]);
     }
     printf("\n");
-
     encrypt(&key_chars, decoded_masterkey_array, iv); 
-
     printf("Stored Key (Hex): ");
     for (size_t i = 0; i < padded_len; i++) {
         printf("%02x", (unsigned char)key_chars[i]);
     }
     printf("\n");
-
     int new_size = encode64(&key_chars, padded_len);
-
     printf("encrypted key (base64): ");
     printf("%s\n", key_chars);
-
-    FILE *file1 = fopen("./textfiles/key.txt", "w");
+    char key_path[128];
+    snprintf(key_path, sizeof(key_path), "%s/key.txt", DATA_DIR);
+    FILE *file1 = fopen(key_path, "w");
     if (file1 == NULL) {
         free(masterkey_array);
         free(decoded_masterkey_array);
         free(key_chars);
         return;
     }
-
     fwrite(key_chars, 1, new_size, file1);
     free(key_chars);
     fclose(file1);
-
     char *stored_iv = (char*)malloc(16);
     if (stored_iv == NULL) {
         fprintf(stderr, "Memory allocation failed\n");
         return;
     }
     memcpy(stored_iv, iv, 16);
-
     size_t new_iv_size = encode64(&stored_iv, 16); // Encode the stored key in Base64 format.
     printf("iv (base64): ");
     printf("%s\n", stored_iv);
-
-    FILE *file2 = fopen("./textfiles/key_iv.txt", "w");
+    char keyiv_path[128];
+    snprintf(keyiv_path, sizeof(keyiv_path), "%s/key_iv.txt", DATA_DIR);
+    FILE *file2 = fopen(keyiv_path, "w");
     if (file2 == NULL){
         free(masterkey_array);
         free(decoded_masterkey_array);
@@ -165,11 +156,8 @@ void StoreKey(unsigned char* key) {
         free(key_chars); // Free the allocated memory after use.
         return;
     }
-    
-
     fwrite(stored_iv, 1, new_iv_size, file2);
     fclose(file2);
-
     free(masterkey_array);
     free(stored_iv);
 }
@@ -264,15 +252,14 @@ void cbc_init(unsigned char (*plaintext)[4][4], unsigned char* iv) {
     }
 }
 
-void write_pass(char* struct_user, char* struct_pass){
-    int sizeOfStruct = 0;
+void write_pass(char* plaintext){
+    ensure_data_dir();
+    int sizeOfPlaintext = (int)strlen(plaintext)+ 1;
 
-    sizeOfStruct = strlen(struct_user) + strlen(struct_pass);
+    printf("%d\n",sizeOfPlaintext);
 
-    printf("%d\n",sizeOfStruct);
-
-    char *storePass = (char*)malloc(sizeof(char) * sizeOfStruct*2);
-    snprintf(storePass, sizeOfStruct*2, "%s:%s", struct_user, struct_pass);
+    char *storePlaintext = (char*)malloc(sizeof(char) * sizeOfPlaintext);
+    snprintf(storePlaintext, sizeOfPlaintext, "%s", plaintext);
 
     const int key_size = 256; // AES-256 key size.
     unsigned char key[32];
@@ -288,60 +275,56 @@ void write_pass(char* struct_user, char* struct_pass){
     unsigned char iv[17];
     gen_iv(iv);
     iv[16] = '\0';
-    getPadded(&storePass); // Pad the plaintext.
+    getPadded(&storePlaintext); // Pad the plaintext.
 
 
-    int size = encrypt(&storePass, key, iv); // Encrypt Username and Password
+    int size = encrypt(&storePlaintext, key, iv); // Encrypt Username and Password
     printf("Storepass encrypted (Hex): ");
     for (size_t i = 0; i < (size_t)size; i++) {
-        printf("%02x", (unsigned char)storePass[i]);
+        printf("%02x", (unsigned char)storePlaintext[i]);
     }
     printf("\n");
-    size_t new_size = encode64(&storePass, size); // Base64 encode encrypted Username and Password for storage
+    size_t new_size = encode64(&storePlaintext, size); // Base64 encode encrypted Username and Password for storage
     printf("Storepass encrypted (base64): ");
-    printf("%s\n", storePass);
+    printf("%s\n", storePlaintext);
 
     StoreKey(key); // Encrypt and store key used to encrypt Username and Password
 
-    FILE *passwordFile = fopen("./textfiles/password.txt", "w");
+    char password_path[128];
+    snprintf(password_path, sizeof(password_path), "%s/password.txt", DATA_DIR);
+    FILE *passwordFile = fopen(password_path, "w");
     if (passwordFile == NULL){
-        free(storePass);
+        free(storePlaintext);
         return;
     }
-
-    fwrite(storePass, new_size, 1, passwordFile);
+    fwrite(storePlaintext, new_size, 1, passwordFile);
     fclose(passwordFile);
-
     char *pass_iv = (char*)malloc(16);
     if (pass_iv == NULL) {
         fprintf(stderr, "Memory allocation failed\n");
         return;
     }
     memcpy(pass_iv, iv, 16);
-
     size_t new_iv_size = encode64(&pass_iv, 16); // Encode the stored key in Base64 format.
     printf("iv (base64): ");
     printf("%s\n", pass_iv);
-
-    FILE *ivFile = fopen("./textfiles/pass_iv.txt", "w");
+    char passiv_path[128];
+    snprintf(passiv_path, sizeof(passiv_path), "%s/pass_iv.txt", DATA_DIR);
+    FILE *ivFile = fopen(passiv_path, "w");
     if (ivFile == NULL){
-        free(storePass);
+        free(storePlaintext);
         return;
     }
     fwrite(pass_iv, 1, new_iv_size, ivFile);
-
-    free(storePass);
+    free(storePlaintext);
 }
 
 
 int main(int argc, char* argv[]) {
-    if (argc != 3) {
-        fprintf(stderr, "Usage: %s <username> <password>\n", argv[0]);
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <username>\n", argv[0]);
         return EXIT_FAILURE;
     }
-    struct passwords pass;
-    pass.username = argv[1];
-    pass.password = argv[2];
-    write_pass(pass.username, pass.password);
+    write_pass(argv[1]);
     return 0;
 }
