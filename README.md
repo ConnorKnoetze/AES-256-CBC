@@ -1,85 +1,93 @@
-# Password Manager in C
 
-This project is a password manager implemented in C. It uses AES-256 encryption in CBC mode to securely store passwords, with Base64 encoding for the encrypted output. The program also supports secure key storage and deterministic testing for development purposes.
+# AES-256-CBC Encryption & Decryption Tool
+
+**Note:** This branch is specifically tailored for integration with the pass-manager app. It may contain modifications or interfaces designed to work seamlessly with that application.
+
+This project is a general-purpose AES encryption and decryption tool implemented in C. It uses AES-256 in CBC mode for secure encryption and decryption of data, with Base64 encoding for easy file handling. The tool is designed to work with files and can be used from any directory containing a `textfiles` folder with the required input files.
 
 ## Features
 
-- AES-256 encryption with CBC mode.
-- Base64 encoding for encrypted data.
-- Secure key and initialization vector (IV) generation using OpenSSL.
-- Deterministic testing with fixed keys and IVs (for development).
-- Password storage in a file (`password.txt`).
-- Secure storage of encryption keys in a file (`keys.txt`).
-- Master key management using a file (`masterkey.txt`).
+- AES-256 encryption and decryption in CBC mode
+- Base64 encoding/decoding for encrypted data
+- File-based input and output for keys, IVs, plaintext, and ciphertext
+- Modular structure with separate encryption and decryption executables
+- Cross-platform support (Windows, Linux)
+- Easy integration into scripts or other tools
 
-## Files
+## Directory Structure
 
-- `main.c`: Contains the main logic for the password manager, including user input handling and password storage.
-- `encrypt.c`: Implements AES encryption, Base64 encoding, key storage, and related cryptographic functions.
-- `password.txt`: Stores the encrypted and Base64-encoded passwords.
-- `keys.txt`: Stores the Base64-encoded encryption keys.
-- `masterkey.txt`: Stores the master key used for encrypting the encryption keys.
+- `encrypt/` — Source and executable for encryption
+- `decrypt/` — Source and executable for decryption
+- `textfiles/` — Input/output files (keys, IVs, plaintext, ciphertext, etc.)
+- `build/` — (Optional) Pre-built binaries and test files
 
+## How to Build
 
-## How to Build the Binaries (Windows, GCC)
+You can build the encryption and decryption binaries using GCC. OpenSSL development libraries are required.
 
-This branch organizes all output files in a `textfiles` directory at the project root. You can build the encryption and decryption binaries as follows:
+### Build Encryption
 
-### Build the Encryption Binary
-
-From the project root, run:
-
-```
+```bash
 gcc -o encrypt/encrypt encrypt/encrypt.c -I. -lssl -lcrypto
 ```
 
-This will produce `encrypt/encrypt.exe`.
+### Build Decryption
 
-### Build the Decryption Binary
-
-From the project root, run:
-
-```
+```bash
 gcc -o decrypt/tester decrypt/tester.c -I. -lssl -lcrypto
 ```
-
-This will produce `decrypt/tester.exe`.
 
 ### Requirements
 
 - GCC compiler (MinGW or MSYS2 recommended for Windows)
-- OpenSSL development libraries (ensure `-lssl -lcrypto` are available)
+- OpenSSL development libraries (`-lssl -lcrypto`)
 
-### Usage
+## Usage
 
-**Encryption:**
+All input and output files are expected in the `textfiles` directory in your current working directory.
 
+### Encryption
+
+Run the encryption executable to encrypt data. Example:
+
+```bash
+encrypt/encrypt
 ```
-encrypt/encrypt <username> <password>
-```
 
-This will generate encrypted files in the `textfiles` directory.
+This will read plaintext and key/IV files from `textfiles/`, perform encryption, and write the ciphertext to `textfiles/output.txt` (or similar).
 
-**Decryption:**
+### Decryption
 
-```
+Run the decryption executable to decrypt data. Example:
+
+```bash
 decrypt/tester
 ```
 
-This will read from the files in `textfiles` and print the decrypted username and password.
+This will read ciphertext and key/IV files from `textfiles/`, perform decryption, and print the plaintext to stdout and write it to `textfiles/output.txt`.
 
-### Notes
+For application integration, you can uncomment the `MAINACTIVE` macro in the source code. This allows you to call `decrypt.exe` directly and pass the required arguments (e.g., the actual contents of the required inputs) as command-line parameters. If `MAINACTIVE` is not enabled, the `tester` executable will handle input and output directly from the `textfiles` directory.
 
-- All output and input files are stored in the `textfiles` directory at the project root.
-- If you encounter header file errors, add `-I.` to your GCC command to include the current directory.
+### Example: Calling `decrypt.exe` with Arguments
 
-## Requirements
+If the `MAINACTIVE` macro is enabled, you can call `decrypt.exe` as follows:
 
-- GCC compiler installed on your system.
-- OpenSSL library for cryptographic functions.
+```bash
+decrypt.exe <masterkey> <key> <keyiv> <ciphertext> <passiv> <msize> <ksize> <keyivsize> <csize> <passivsize>
+```
+
+For example:
+
+```bash
+decrypt.exe "my_master_key" "my_key" "my_key_iv" "encrypted_data" "passiv_data" 32 32 16 128 16
+```
+
+This will decrypt the ciphertext using the provided inputs and sizes, then output the plaintext to stdout and write it to `textfiles/output.txt`.
 
 ## Notes
 
-- For testing purposes, deterministic keys and IVs can be enabled by defining the `USE_SEEDED_RANDOM` macro in the code.
-- Ensure the `password.txt`, `keys.txt`, and `masterkey.txt` files are stored securely, as they contain sensitive information.
-- The program uses PKCS#7 padding for encryption and Base64 encoding for output.
+- All file paths are relative to the `textfiles` directory, so you can run the executables from any directory containing this folder.
+- The tool uses PKCS#7 padding and Base64 encoding for output.
+- For testing, deterministic keys and IVs can be enabled by defining the `USE_SEEDED_RANDOM` macro.
+- Ensure all sensitive files (keys, IVs, plaintext, ciphertext) are stored securely.
+- **Important Note:** `decrypt.exe` strictly requires AES-256 standard input and cannot handle other key sizes. The inputs must come directly from the contents of the files produced by the encryption process to ensure compatibility and correctness.
