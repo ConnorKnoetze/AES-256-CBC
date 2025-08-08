@@ -20,12 +20,6 @@ void cbc_init(unsigned char (*plaintext)[4][4], unsigned char* iv);
 void cbc_main(unsigned char (*plaintext)[4][4], unsigned char prev[4][4]);
 int encrypt(char** storePass, unsigned char* key, unsigned char* iv);
 
-struct passwords 
-{
-    char *username;
-    char *password;
-};
-
 void gen_iv(unsigned char* iv){
     if (RAND_bytes(iv, 16) != 1) {
         fprintf(stderr, "Error generating IV\n");
@@ -258,16 +252,14 @@ void cbc_init(unsigned char (*plaintext)[4][4], unsigned char* iv) {
     }
 }
 
-void write_pass(char* struct_user, char* struct_pass){
+void write_pass(char* plaintext){
     ensure_data_dir();
-    int sizeOfStruct = 0;
+    int sizeOfPlaintext = (int)strlen(plaintext)+ 1;
 
-    sizeOfStruct = strlen(struct_user) + strlen(struct_pass) + 1;
+    printf("%d\n",sizeOfPlaintext);
 
-    printf("%d\n",sizeOfStruct);
-
-    char *storePass = (char*)malloc(sizeof(char) * sizeOfStruct*2);
-    snprintf(storePass, sizeOfStruct*2, "%s:%s", struct_user, struct_pass);
+    char *storePlaintext = (char*)malloc(sizeof(char) * sizeOfPlaintext);
+    snprintf(storePlaintext, sizeOfPlaintext, "%s", plaintext);
 
     const int key_size = 256; // AES-256 key size.
     unsigned char key[32];
@@ -283,18 +275,18 @@ void write_pass(char* struct_user, char* struct_pass){
     unsigned char iv[17];
     gen_iv(iv);
     iv[16] = '\0';
-    getPadded(&storePass); // Pad the plaintext.
+    getPadded(&storePlaintext); // Pad the plaintext.
 
 
-    int size = encrypt(&storePass, key, iv); // Encrypt Username and Password
+    int size = encrypt(&storePlaintext, key, iv); // Encrypt Username and Password
     printf("Storepass encrypted (Hex): ");
     for (size_t i = 0; i < (size_t)size; i++) {
-        printf("%02x", (unsigned char)storePass[i]);
+        printf("%02x", (unsigned char)storePlaintext[i]);
     }
     printf("\n");
-    size_t new_size = encode64(&storePass, size); // Base64 encode encrypted Username and Password for storage
+    size_t new_size = encode64(&storePlaintext, size); // Base64 encode encrypted Username and Password for storage
     printf("Storepass encrypted (base64): ");
-    printf("%s\n", storePass);
+    printf("%s\n", storePlaintext);
 
     StoreKey(key); // Encrypt and store key used to encrypt Username and Password
 
@@ -302,10 +294,10 @@ void write_pass(char* struct_user, char* struct_pass){
     snprintf(password_path, sizeof(password_path), "%s/password.txt", DATA_DIR);
     FILE *passwordFile = fopen(password_path, "w");
     if (passwordFile == NULL){
-        free(storePass);
+        free(storePlaintext);
         return;
     }
-    fwrite(storePass, new_size, 1, passwordFile);
+    fwrite(storePlaintext, new_size, 1, passwordFile);
     fclose(passwordFile);
     char *pass_iv = (char*)malloc(16);
     if (pass_iv == NULL) {
@@ -320,22 +312,19 @@ void write_pass(char* struct_user, char* struct_pass){
     snprintf(passiv_path, sizeof(passiv_path), "%s/pass_iv.txt", DATA_DIR);
     FILE *ivFile = fopen(passiv_path, "w");
     if (ivFile == NULL){
-        free(storePass);
+        free(storePlaintext);
         return;
     }
     fwrite(pass_iv, 1, new_iv_size, ivFile);
-    free(storePass);
+    free(storePlaintext);
 }
 
 
 int main(int argc, char* argv[]) {
-    if (argc != 3) {
-        fprintf(stderr, "Usage: %s <username> <password>\n", argv[0]);
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <username>\n", argv[0]);
         return EXIT_FAILURE;
     }
-    struct passwords pass;
-    pass.username = argv[1];
-    pass.password = argv[2];
-    write_pass(pass.username, pass.password);
+    write_pass(argv[1]);
     return 0;
 }

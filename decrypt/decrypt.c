@@ -179,7 +179,7 @@ int main(int argc, char *argv[]) {
     strncpy(PASSIV, argv[5], passivsize);
     PASSIV[passivsize] = '\0';
 
-    printf("%s, %s, %s, %s\n", MASTERKEY, KEY, KEYIV, CIPHERTEXT);
+    // printf("%s, %s, %s, %s\n", MASTERKEY, KEY, KEYIV, CIPHERTEXT);
 
     char *plaintext = decrypt(MASTERKEY, KEY, KEYIV, CIPHERTEXT, PASSIV, msize, ksize, ivsize, csize, passivsize);
 
