@@ -5,6 +5,9 @@
 #include "../encrypt/encode64.h"
 #include "AES_Decrypt.h"
 
+#include <direct.h>
+#define DATA_DIR "textfiles"
+
 
 unsigned char* decrypt(char *masterkey, char *key, char *iv, char *ciphertext, char *pass_iv,
             size_t masterkey_size, size_t key_size, size_t iv_size, size_t ciphertext_size, size_t pass_iv_size);
@@ -157,22 +160,55 @@ void cbc_main(unsigned char (*plaintext)[4][4], unsigned char prev[4][4]){
 
 #ifdef MAINACTIVE
 int main(int argc, char *argv[]) {
-    if (argc != 9){
-        fprintf(stderr, "Usage: %s <masterkey> <key> <iv> <ciphertext> <msize> <ksize> <ivsize> <csize>\n", argv[0]);
+    if (argc != 11){
+        fprintf(stderr, "Usage: %s <masterkey> <key> <keyiv> <ciphertext> <passiv> <msize> <ksize> <keyivsize> <csize> <passivsize>\n", argv[0]);
         return EXIT_FAILURE;
     }
 
-    int msize=(int)argv[5], ksize=(int)argv[6], ivsize=(int)argv[7], csize=(int)argv[8];
-    char MASTERKEY[msize], KEY[ksize], IV[ivsize], CIPHERTEXT[csize];
+    int msize = atoi(argv[6]), ksize = atoi(argv[7]), ivsize = atoi(argv[8]), csize = atoi(argv[9]), passivsize = atoi(argv[10]);
+    char MASTERKEY[msize + 1], KEY[ksize + 1], KEYIV[ivsize + 1], CIPHERTEXT[csize + 1], PASSIV[passivsize + 1];
 
     strncpy(MASTERKEY, argv[1], msize);
+    MASTERKEY[msize] = '\0';
     strncpy(KEY, argv[2], ksize);
-    strncpy(IV, argv[3], ivsize);
+    KEY[ksize] = '\0';
+    strncpy(KEYIV, argv[3], ivsize);
+    KEYIV[ivsize] = '\0';
     strncpy(CIPHERTEXT, argv[4], csize);
+    CIPHERTEXT[csize] = '\0';
+    strncpy(PASSIV, argv[5], passivsize);
+    PASSIV[passivsize] = '\0';
 
-    printf("%s, %s, %s, %s\n", MASTERKEY, KEY, IV, CIPHERTEXT);
+    printf("%s, %s, %s, %s\n", MASTERKEY, KEY, KEYIV, CIPHERTEXT);
 
-    decrypt(MASTERKEY, KEY, IV, CIPHERTEXT, msize, ksize, ivsize, csize);
+    char *plaintext = decrypt(MASTERKEY, KEY, KEYIV, CIPHERTEXT, PASSIV, msize, ksize, ivsize, csize, passivsize);
 
+    char output_path[256];
+    snprintf(output_path, sizeof(output_path), "%s/output.txt", DATA_DIR);
+    FILE *output = fopen(output_path, "w");
+    if (output == NULL){
+        free(MASTERKEY);
+        free(KEY);
+        free(CIPHERTEXT);
+        free(PASSIV);
+        free(KEYIV);
+        perror("Error opening output.txt");
+        return -1;
+    }
+
+    // Get the size of plaintext by calculating its length
+    size_t plaintext_size = strlen((char*)plaintext);
+
+    fwrite(plaintext, 1, plaintext_size, output);
+    fclose(output);
+
+    free(MASTERKEY);
+    free(KEY);
+    free(CIPHERTEXT);
+    free(PASSIV);
+    free(KEYIV);
+    free(plaintext);
+
+    return 0;
 }
 #endif

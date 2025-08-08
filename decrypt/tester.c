@@ -79,7 +79,7 @@ int main(){
     while(fgets(ciphertext, ciphertext_size, ciphertextFile)){};
     while(fgets(pass_iv, pass_iv_size, pass_ivFile)){};
 
-
+    printf(" %s %s %s %s %s %d %d %d %d %d\n", masterkey, key, key_iv, ciphertext, pass_iv, masterkey_size, key_size, iv_size, ciphertext_size, pass_iv_size);
     unsigned char* plaintext = decrypt(masterkey, key, key_iv, ciphertext, pass_iv,masterkey_size, key_size, iv_size, ciphertext_size, pass_iv_size);
 
 
